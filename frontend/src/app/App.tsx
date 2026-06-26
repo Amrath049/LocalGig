@@ -1,0 +1,1338 @@
+import { useState } from "react";
+import {
+  Search,
+  MapPin,
+  CheckCircle,
+  X,
+  Phone,
+  User,
+  ArrowRight,
+  Edit2,
+  Check,
+  Plus,
+  ChevronRight,
+  LogOut,
+  Clock,
+  SlidersHorizontal,
+  Briefcase,
+  ChevronDown,
+} from "lucide-react";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type View = "home" | "login" | "worker" | "employer" | "jobs";
+type JobFilter = "All" | "Full-time" | "Part-time" | "Gig";
+type WorkerTab = "browse" | "applications" | "profile";
+type EmployerTab = "listings" | "post";
+type PayType = "Fixed" | "Range" | "Open to discuss";
+type AppStatus = "Applied" | "Seen" | "Shortlisted" | "Hired";
+type ApplicantStatus = "Applied" | "Seen" | "Shortlisted" | "Hired" | "Declined";
+type SortOption = "newest" | "oldest";
+
+interface Job {
+  id: number;
+  title: string;
+  employer: string;
+  verified: boolean;
+  type: string;
+  pay: string;
+  payValue: number; // for filtering; 0 = open to discuss
+  skills: string[];
+  posted: string;
+  postedDays: number; // 0 = today
+  location: string;
+}
+
+interface MyApplication {
+  id: number;
+  title: string;
+  employer: string;
+  appliedDate: string;
+  status: AppStatus;
+}
+
+interface Applicant {
+  id: number;
+  name: string;
+  phone: string;
+  skills: string[];
+  status: ApplicantStatus;
+}
+
+interface Listing {
+  id: number;
+  title: string;
+  type: string;
+  pay: string;
+  posted: string;
+  applicants: Applicant[];
+}
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+const CITY = "Pune";
+
+const JOBS: Job[] = [
+  { id: 1,  title: "Plumber — Residential",       employer: "Greenfield Housing Society", verified: true,  type: "Full-time", pay: "₹18,000 / month", payValue: 18000, skills: ["Plumbing", "Pipe fitting", "Leak repairs"],       posted: "2 days ago",  postedDays: 2, location: "Kothrud" },
+  { id: 2,  title: "Cook — Breakfast & Lunch",     employer: "Sunrise Dhaba",              verified: true,  type: "Part-time", pay: "₹12,000 / month", payValue: 12000, skills: ["Indian cooking", "Fast prep", "Hygiene"],          posted: "1 day ago",   postedDays: 1, location: "Shivajinagar" },
+  { id: 3,  title: "Delivery Rider",               employer: "QuickMart",                  verified: false, type: "Gig",       pay: "₹600 / day",      payValue: 600,   skills: ["Two-wheeler", "Navigation", "Punctual"],           posted: "Today",       postedDays: 0, location: "Hadapsar" },
+  { id: 4,  title: "Shop Assistant",               employer: "Mehta Electronics",          verified: true,  type: "Full-time", pay: "Open to discuss",  payValue: 0,     skills: ["Customer service", "Sales", "Stock handling"],     posted: "3 days ago",  postedDays: 3, location: "Laxmi Road" },
+  { id: 5,  title: "House Painter",                employer: "BuildRight Contractors",     verified: false, type: "Gig",       pay: "₹800 / day",      payValue: 800,   skills: ["Painting", "Wall prep", "Mixing"],                 posted: "Today",       postedDays: 0, location: "Baner" },
+  { id: 6,  title: "Night Security Guard",         employer: "Lakshmi Apartments",         verified: true,  type: "Full-time", pay: "₹15,000 / month", payValue: 15000, skills: ["Vigilance", "Night shift", "Communication"],       posted: "4 days ago",  postedDays: 4, location: "Wakad" },
+  { id: 7,  title: "Tea Stall Helper",             employer: "Chotu Bhai Chai",            verified: false, type: "Part-time", pay: "₹8,000 / month",  payValue: 8000,  skills: ["Serving", "Cleaning", "Cash handling"],           posted: "Today",       postedDays: 0, location: "Camp" },
+  { id: 8,  title: "Electrician — On-call",        employer: "City Fix Services",          verified: true,  type: "Gig",       pay: "₹700 / day",      payValue: 700,   skills: ["Wiring", "Fault finding", "Safety"],               posted: "2 days ago",  postedDays: 2, location: "Kharadi" },
+  { id: 9,  title: "Warehouse Loader",             employer: "FastTrack Logistics",        verified: true,  type: "Full-time", pay: "₹14,000 / month", payValue: 14000, skills: ["Heavy lifting", "Sorting", "Forklift basics"],     posted: "1 day ago",   postedDays: 1, location: "Chakan" },
+  { id: 10, title: "Tailor — Men's Wear",          employer: "Kapda King",                 verified: false, type: "Full-time", pay: "₹16,000 / month", payValue: 16000, skills: ["Stitching", "Fitting", "Fabric knowledge"],        posted: "5 days ago",  postedDays: 5, location: "Deccan" },
+  { id: 11, title: "Auto Driver — App-based",      employer: "City Rides Co-op",           verified: true,  type: "Gig",       pay: "Open to discuss",  payValue: 0,     skills: ["Driving", "Navigation", "Customer handling"],      posted: "Today",       postedDays: 0, location: "Swargate" },
+  { id: 12, title: "Receptionist — Clinic",        employer: "Jeevan Clinic",              verified: true,  type: "Part-time", pay: "₹9,500 / month",  payValue: 9500,  skills: ["Communication", "Scheduling", "Computer basics"],  posted: "3 days ago",  postedDays: 3, location: "Aundh" },
+];
+
+const ALL_SKILLS = Array.from(new Set(JOBS.flatMap((j) => j.skills))).sort();
+
+const MY_APPLICATIONS: MyApplication[] = [
+  { id: 1, title: "Cook — Breakfast & Lunch", employer: "Sunrise Dhaba",   appliedDate: "15 Jun 2026", status: "Shortlisted" },
+  { id: 2, title: "Shop Assistant",           employer: "Mehta Electronics", appliedDate: "18 Jun 2026", status: "Seen" },
+  { id: 3, title: "Delivery Rider",           employer: "QuickMart",         appliedDate: "20 Jun 2026", status: "Applied" },
+];
+
+const EMPLOYER_LISTINGS: Listing[] = [
+  {
+    id: 1, title: "Plumber — Residential", type: "Full-time", pay: "₹18,000 / month", posted: "2 days ago",
+    applicants: [
+      { id: 1, name: "Ramesh Kumar", phone: "+91 98765 43210", skills: ["Plumbing", "Pipe fitting"],          status: "Shortlisted" },
+      { id: 2, name: "Sunita Devi",  phone: "+91 87654 32109", skills: ["Plumbing", "Leak repairs"],          status: "Applied" },
+      { id: 3, name: "Arjun Sharma", phone: "+91 76543 21098", skills: ["Pipe fitting", "Repairs"],           status: "Seen" },
+      { id: 4, name: "Priya Nair",   phone: "+91 65432 10987", skills: ["Plumbing", "Welding"],               status: "Applied" },
+    ],
+  },
+  {
+    id: 2, title: "House Painter (2 openings)", type: "Gig", pay: "₹800 / day", posted: "5 days ago",
+    applicants: [
+      { id: 5, name: "Mohan Das",    phone: "+91 54321 09876", skills: ["Painting", "Wall prep"],             status: "Applied" },
+      { id: 6, name: "Kavya Reddy",  phone: "+91 43210 98765", skills: ["Painting", "Texturing"],             status: "Hired" },
+    ],
+  },
+];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function typeStyle(type: string) {
+  if (type === "Full-time") return "bg-[#EBF0E8] text-[#3D6B4F]";
+  if (type === "Part-time") return "bg-[#F5EDE0] text-[#8C5A20]";
+  return "bg-[#EEE8F5] text-[#5E3D8A]";
+}
+
+function statusStyle(status: string) {
+  if (status === "Hired")     return "bg-[#E6F2E8] text-[#2D6B3D]";
+  if (status === "Shortlisted") return "bg-[#FFF0D6] text-[#8C5A10]";
+  if (status === "Seen")      return "bg-[#F0EBE3] text-[#7C4A2D]";
+  if (status === "Declined" || status === "Not Selected") return "bg-[#FDE8E5] text-[#C0503A]";
+  return "bg-[#EDE6DC] text-[#8C7B6E]";
+}
+
+const STATUS_FLOW: AppStatus[] = ["Applied", "Seen", "Shortlisted", "Hired"];
+
+// ─── Paper Texture ────────────────────────────────────────────────────────────
+
+function PaperTexture() {
+  return (
+    <div
+      className="fixed inset-0 pointer-events-none z-0"
+      aria-hidden="true"
+      style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E")`,
+        opacity: 0.028,
+      }}
+    />
+  );
+}
+
+// ─── Neighbourhood SVG ────────────────────────────────────────────────────────
+
+function NeighbourhoodIllustration() {
+  return (
+    <svg viewBox="0 0 480 300" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full opacity-[0.13]" aria-hidden="true">
+      <rect x="20" y="55" width="72" height="245" rx="3" stroke="#7C4A2D" strokeWidth="1.5" />
+      <rect x="32" y="70" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="62" y="70" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="32" y="98" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="62" y="98" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="32" y="126" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="62" y="126" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="32" y="154" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="62" y="154" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="32" y="182" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="62" y="182" width="18" height="14" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="42" y="258" width="28" height="42" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="114" y="140" width="88" height="160" rx="3" stroke="#7C4A2D" strokeWidth="1.5" />
+      <path d="M112 142 L158 100 L204 142" stroke="#7C4A2D" strokeWidth="1.5" strokeLinejoin="round" />
+      <rect x="170" y="88" width="12" height="22" rx="1" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="126" y="158" width="22" height="18" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="168" y="158" width="22" height="18" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="126" y="192" width="22" height="18" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="168" y="192" width="22" height="18" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="143" y="258" width="30" height="42" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="224" y="170" width="104" height="130" rx="3" stroke="#7C4A2D" strokeWidth="1.5" />
+      <path d="M222 172 L276 136 L330 172" stroke="#7C4A2D" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M224 188 Q276 178 328 188" stroke="#7C4A2D" strokeWidth="1.5" />
+      <rect x="236" y="192" width="36" height="30" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="280" y="192" width="36" height="30" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="236" y="240" width="80" height="14" rx="3" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="252" y="263" width="24" height="37" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="276" y="263" width="24" height="37" rx="2" stroke="#7C4A2D" strokeWidth="1" />
+      <rect x="348" y="148" width="52" height="60" rx="4" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="374" y1="208" x2="374" y2="262" stroke="#7C4A2D" strokeWidth="2" />
+      <circle cx="356" cy="155" r="3.5" stroke="#7C4A2D" strokeWidth="1" />
+      <circle cx="392" cy="155" r="3.5" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="358" y1="165" x2="390" y2="165" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="358" y1="174" x2="390" y2="174" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="358" y1="183" x2="386" y2="183" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="358" y1="192" x2="382" y2="192" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="358" y1="201" x2="378" y2="201" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="430" y1="300" x2="430" y2="195" stroke="#7C4A2D" strokeWidth="2" />
+      <ellipse cx="430" cy="178" rx="28" ry="24" stroke="#7C4A2D" strokeWidth="1.5" />
+      <ellipse cx="414" cy="190" rx="17" ry="14" stroke="#7C4A2D" strokeWidth="1" />
+      <ellipse cx="446" cy="190" rx="17" ry="14" stroke="#7C4A2D" strokeWidth="1" />
+      <circle cx="350" cy="272" r="20" stroke="#7C4A2D" strokeWidth="1.5" />
+      <circle cx="394" cy="272" r="20" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="350" y1="272" x2="372" y2="252" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="372" y1="252" x2="394" y2="272" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="372" y1="252" x2="372" y2="240" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="364" y1="240" x2="380" y2="240" stroke="#7C4A2D" strokeWidth="2" />
+      <line x1="350" y1="272" x2="372" y2="272" stroke="#7C4A2D" strokeWidth="1.5" />
+      <line x1="456" y1="300" x2="456" y2="220" stroke="#7C4A2D" strokeWidth="1.5" />
+      <path d="M456 220 Q456 210 466 210" stroke="#7C4A2D" strokeWidth="1.5" />
+      <circle cx="468" cy="210" r="4" stroke="#7C4A2D" strokeWidth="1" />
+      <line x1="10" y1="300" x2="470" y2="300" stroke="#7C4A2D" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+// ─── Shared small components ──────────────────────────────────────────────────
+
+function SkillTag({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider bg-[#A3B899]/20 text-[#3D6858]">
+      {label}
+    </span>
+  );
+}
+
+function TypeTag({ label }: { label: string }) {
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider ${typeStyle(label)}`}>
+      {label}
+    </span>
+  );
+}
+
+// ─── Job Card ─────────────────────────────────────────────────────────────────
+
+interface JobCardProps {
+  job: Job;
+  applied?: boolean;
+  onApply?: () => void;
+  showApplyButton?: boolean;
+  applicantBadge?: number;
+  onViewApplicants?: () => void;
+}
+
+function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadge, onViewApplicants }: JobCardProps) {
+  return (
+    <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 flex flex-col gap-4 shadow-[0_2px_12px_rgba(44,26,14,0.07)] hover:shadow-[0_4px_20px_rgba(44,26,14,0.12)] hover:-translate-y-0.5 transition-all duration-200">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-['Fraunces'] font-bold text-[17px] text-[#7C4A2D] leading-snug">{job.title}</h3>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span className="text-sm text-[#8C7B6E]">{job.employer}</span>
+            {job.verified && <CheckCircle className="w-3.5 h-3.5 text-[#6A9E78] flex-shrink-0" />}
+            {"location" in job && (
+              <span className="text-xs text-[#8C7B6E] flex items-center gap-0.5">
+                <MapPin className="w-3 h-3" /> {(job as Job).location}
+              </span>
+            )}
+          </div>
+        </div>
+        {applicantBadge !== undefined && (
+          <span className="flex-shrink-0 bg-[#E07B39] text-[#FFFDF9] text-xs font-semibold px-2.5 py-1 rounded-full">
+            {applicantBadge} applied
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <TypeTag label={job.type} />
+        {job.skills.map((s) => <SkillTag key={s} label={s} />)}
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-[#E8DDD4]/70">
+        <div>
+          <p className="font-semibold text-[#2C1A0E] text-sm">{job.pay}</p>
+          <p className="text-[11px] text-[#8C7B6E] flex items-center gap-1 mt-0.5">
+            <Clock className="w-3 h-3" /> {job.posted}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {showApplyButton && (
+            <button
+              onClick={onApply}
+              disabled={applied}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+                applied
+                  ? "bg-[#E6F2E8] text-[#2D6B3D] cursor-default"
+                  : "bg-[#E07B39] text-[#FFFDF9] hover:bg-[#CA6A28] active:scale-95"
+              }`}
+            >
+              {applied ? <><Check className="w-3.5 h-3.5" /> Applied</> : <>Apply Now <ArrowRight className="w-3.5 h-3.5" /></>}
+            </button>
+          )}
+          {onViewApplicants && (
+            <button onClick={onViewApplicants} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-[#F0EBE3] text-[#7C4A2D] border border-[#E8DDD4] hover:bg-[#E8DDD4] transition-colors">
+              View <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {!showApplyButton && !onViewApplicants && (
+            <button className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-[#E07B39] text-[#FFFDF9] hover:bg-[#CA6A28] active:scale-95 transition-all duration-150">
+              Apply Now <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Filter Panel (reusable) ──────────────────────────────────────────────────
+
+interface FilterState {
+  jobType: JobFilter;
+  pay: string;
+  posted: string;
+  skills: string[];
+  sort: SortOption;
+}
+
+interface FilterPanelProps {
+  filters: FilterState;
+  onChange: (f: FilterState) => void;
+  onReset: () => void;
+  resultCount: number;
+}
+
+const PAY_OPTIONS = ["Any", "Under ₹10k", "₹10k – ₹20k", "₹20k+", "Open to discuss"];
+const POSTED_OPTIONS = ["Any time", "Today", "Last 3 days", "This week"];
+const JOB_TYPES: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
+
+function FilterPanel({ filters, onChange, onReset, resultCount }: FilterPanelProps) {
+  function set<K extends keyof FilterState>(key: K, val: FilterState[K]) {
+    onChange({ ...filters, [key]: val });
+  }
+
+  function toggleSkill(skill: string) {
+    const has = filters.skills.includes(skill);
+    set("skills", has ? filters.skills.filter((s) => s !== skill) : [...filters.skills, skill]);
+  }
+
+  const hasActive =
+    filters.jobType !== "All" ||
+    filters.pay !== "Any" ||
+    filters.posted !== "Any time" ||
+    filters.skills.length > 0;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium uppercase tracking-widest text-[#8C7B6E]">Filters</p>
+        {hasActive && (
+          <button onClick={onReset} className="text-xs font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors">
+            Reset all
+          </button>
+        )}
+      </div>
+
+      {/* Job type */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Job type</p>
+        <div className="flex flex-col gap-1.5">
+          {JOB_TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => set("jobType", t)}
+              className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm transition-all text-left ${
+                filters.jobType === t
+                  ? "bg-[#7C4A2D] text-[#FAF7F2] font-medium"
+                  : "text-[#2C1A0E] hover:bg-[#F0EBE3]"
+              }`}
+            >
+              {t}
+              {filters.jobType === t && <Check className="w-3.5 h-3.5" />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Pay */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Pay range</p>
+        <div className="flex flex-col gap-1.5">
+          {PAY_OPTIONS.map((p) => (
+            <button
+              key={p}
+              onClick={() => set("pay", p)}
+              className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm transition-all text-left ${
+                filters.pay === p
+                  ? "bg-[#7C4A2D] text-[#FAF7F2] font-medium"
+                  : "text-[#2C1A0E] hover:bg-[#F0EBE3]"
+              }`}
+            >
+              {p}
+              {filters.pay === p && <Check className="w-3.5 h-3.5" />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Posted */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Date posted</p>
+        <div className="flex flex-col gap-1.5">
+          {POSTED_OPTIONS.map((p) => (
+            <button
+              key={p}
+              onClick={() => set("posted", p)}
+              className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm transition-all text-left ${
+                filters.posted === p
+                  ? "bg-[#7C4A2D] text-[#FAF7F2] font-medium"
+                  : "text-[#2C1A0E] hover:bg-[#F0EBE3]"
+              }`}
+            >
+              {p}
+              {filters.posted === p && <Check className="w-3.5 h-3.5" />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Skills */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Skills</p>
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_SKILLS.map((s) => {
+            const active = filters.skills.includes(s);
+            return (
+              <button
+                key={s}
+                onClick={() => toggleSkill(s)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-medium uppercase tracking-wider transition-all ${
+                  active
+                    ? "bg-[#A3B899] text-white"
+                    : "bg-[#A3B899]/20 text-[#3D6858] hover:bg-[#A3B899]/40"
+                }`}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Result count (desktop only) */}
+      <div className="pt-3 border-t border-[#E8DDD4]">
+        <p className="text-sm text-[#8C7B6E]">
+          <span className="font-semibold text-[#2C1A0E]">{resultCount}</span> {resultCount === 1 ? "job" : "jobs"} found
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Jobs Page ────────────────────────────────────────────────────────────────
+
+const DEFAULT_FILTERS: FilterState = {
+  jobType: "All",
+  pay: "Any",
+  posted: "Any time",
+  skills: [],
+  sort: "newest",
+};
+
+function applyFilters(jobs: Job[], f: FilterState, search: string): Job[] {
+  return jobs
+    .filter((j) => {
+      if (f.jobType !== "All" && j.type !== f.jobType) return false;
+
+      if (f.pay === "Under ₹10k" && (j.payValue === 0 || j.payValue >= 10000)) return false;
+      if (f.pay === "₹10k – ₹20k" && (j.payValue < 10000 || j.payValue > 20000)) return false;
+      if (f.pay === "₹20k+" && j.payValue < 20000) return false;
+      if (f.pay === "Open to discuss" && j.payValue !== 0) return false;
+
+      if (f.posted === "Today" && j.postedDays > 0) return false;
+      if (f.posted === "Last 3 days" && j.postedDays > 3) return false;
+      if (f.posted === "This week" && j.postedDays > 7) return false;
+
+      if (f.skills.length > 0 && !f.skills.some((s) => j.skills.includes(s))) return false;
+
+      if (search) {
+        const q = search.toLowerCase();
+        if (!j.title.toLowerCase().includes(q) && !j.employer.toLowerCase().includes(q) && !j.skills.some((s) => s.toLowerCase().includes(q)) && !j.location.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => f.sort === "newest" ? a.postedDays - b.postedDays : b.postedDays - a.postedDays);
+}
+
+function JobsPage() {
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [search, setSearch] = useState("");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const results = applyFilters(JOBS, filters, search);
+
+  const activeFilterCount =
+    (filters.jobType !== "All" ? 1 : 0) +
+    (filters.pay !== "Any" ? 1 : 0) +
+    (filters.posted !== "Any time" ? 1 : 0) +
+    filters.skills.length;
+
+  function resetFilters() {
+    setFilters(DEFAULT_FILTERS);
+    setSearch("");
+  }
+
+  return (
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      {/* Page header */}
+      <div className="mb-6">
+        <h1 className="font-['Fraunces'] text-3xl sm:text-4xl font-bold text-[#7C4A2D]">
+          Jobs in <em className="font-normal">{CITY}</em>
+        </h1>
+        <p className="text-[#8C7B6E] mt-1 text-sm">{JOBS.length} live listings — updated daily</p>
+      </div>
+
+      {/* Search + sort bar */}
+      <div className="flex gap-2 mb-6 flex-wrap sm:flex-nowrap">
+        <div className="flex-1 flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 shadow-sm min-w-0">
+          <Search className="w-4 h-4 text-[#8C7B6E] flex-shrink-0" />
+          <input
+            type="text"
+            placeholder="Search by title, skill, employer, or area…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none min-w-0"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-[#8C7B6E] hover:text-[#2C1A0E] flex-shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Sort dropdown */}
+        <div className="relative">
+          <select
+            value={filters.sort}
+            onChange={(e) => setFilters({ ...filters, sort: e.target.value as SortOption })}
+            className="appearance-none bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 pr-8 text-sm text-[#2C1A0E] outline-none cursor-pointer hover:border-[#7C4A2D] transition-colors shadow-sm"
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#8C7B6E] pointer-events-none" />
+        </div>
+
+        {/* Mobile filter button */}
+        <button
+          onClick={() => setShowMobileFilters(true)}
+          className="lg:hidden flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 text-sm font-medium text-[#2C1A0E] hover:border-[#7C4A2D] transition-colors shadow-sm relative"
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-[#E07B39] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Active filter chips (mobile) */}
+      {activeFilterCount > 0 && (
+        <div className="flex flex-wrap gap-2 mb-5 lg:hidden">
+          {filters.jobType !== "All" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
+              {filters.jobType}
+              <button onClick={() => setFilters({ ...filters, jobType: "All" })}><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filters.pay !== "Any" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
+              {filters.pay}
+              <button onClick={() => setFilters({ ...filters, pay: "Any" })}><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filters.posted !== "Any time" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
+              {filters.posted}
+              <button onClick={() => setFilters({ ...filters, posted: "Any time" })}><X className="w-3 h-3" /></button>
+            </span>
+          )}
+          {filters.skills.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#A3B899] text-white rounded-full text-xs font-medium">
+              {s}
+              <button onClick={() => setFilters({ ...filters, skills: filters.skills.filter((x) => x !== s) })}><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+          <button onClick={resetFilters} className="text-xs font-medium text-[#8C7B6E] hover:text-[#2C1A0E] px-2 py-1.5 transition-colors">
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* Layout: sidebar + cards */}
+      <div className="flex gap-8 items-start">
+        {/* Sidebar — desktop only */}
+        <aside className="hidden lg:block w-56 flex-shrink-0 sticky top-24">
+          <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 shadow-sm">
+            <FilterPanel
+              filters={filters}
+              onChange={setFilters}
+              onReset={resetFilters}
+              resultCount={results.length}
+            />
+          </div>
+        </aside>
+
+        {/* Job cards */}
+        <div className="flex-1 min-w-0">
+          {results.length > 0 ? (
+            <>
+              <p className="text-sm text-[#8C7B6E] mb-4 lg:hidden">
+                <span className="font-semibold text-[#2C1A0E]">{results.length}</span> {results.length === 1 ? "job" : "jobs"} found
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {results.map((job) => <JobCard key={job.id} job={job} />)}
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-14 h-14 bg-[#F0EBE3] rounded-full flex items-center justify-center mb-4">
+                <Briefcase className="w-6 h-6 text-[#8C7B6E]" />
+              </div>
+              <p className="font-['Fraunces'] text-2xl text-[#7C4A2D] mb-2">No jobs match this.</p>
+              <p className="text-sm text-[#8C7B6E] mb-4">Try loosening the filters or searching something different.</p>
+              <button onClick={resetFilters} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors">
+                Reset all filters
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile filter bottom sheet */}
+      {showMobileFilters && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-[#2C1A0E]/40 backdrop-blur-sm"
+            onClick={() => setShowMobileFilters(false)}
+          />
+          {/* Sheet */}
+          <div className="absolute bottom-0 left-0 right-0 bg-[#FAF7F2] rounded-t-3xl max-h-[85vh] flex flex-col shadow-[0_-8px_40px_rgba(44,26,14,0.18)]">
+            {/* Handle */}
+            <div className="flex-shrink-0 flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 bg-[#E8DDD4] rounded-full" />
+            </div>
+            {/* Header */}
+            <div className="flex-shrink-0 flex items-center justify-between px-5 py-3 border-b border-[#E8DDD4]">
+              <h3 className="font-['Fraunces'] text-xl font-bold text-[#7C4A2D]">Filter Jobs</h3>
+              <button onClick={() => setShowMobileFilters(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[#F0EBE3] text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              <FilterPanel
+                filters={filters}
+                onChange={setFilters}
+                onReset={resetFilters}
+                resultCount={results.length}
+              />
+            </div>
+            {/* Apply button */}
+            <div className="flex-shrink-0 p-5 border-t border-[#E8DDD4] bg-[#FAF7F2]">
+              <button
+                onClick={() => setShowMobileFilters(false)}
+                className="w-full bg-[#E07B39] text-[#FFFDF9] py-3.5 rounded-xl text-sm font-semibold hover:bg-[#CA6A28] transition-colors"
+              >
+                Show {results.length} {results.length === 1 ? "job" : "jobs"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+// ─── Navbar ───────────────────────────────────────────────────────────────────
+
+interface NavbarProps {
+  view: View;
+  onHome: () => void;
+  onJobs: () => void;
+  onLogin: () => void;
+  onLogout: () => void;
+  userType: "worker" | "employer" | null;
+}
+
+function Navbar({ view, onHome, onJobs, onLogin, onLogout, userType }: NavbarProps) {
+  const isLoggedIn = view === "worker" || view === "employer";
+  return (
+    <nav className="sticky top-0 z-50 bg-[#FAF7F2]/90 backdrop-blur-sm border-b border-[#E8DDD4]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          <button onClick={onHome} className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D] tracking-tight hover:opacity-75 transition-opacity flex-shrink-0">
+            LocalGig
+          </button>
+          <button
+            onClick={onJobs}
+            className={`hidden sm:flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              view === "jobs" ? "text-[#7C4A2D]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"
+            }`}
+          >
+            <Briefcase className="w-4 h-4" /> Browse Jobs
+          </button>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {!isLoggedIn ? (
+            <>
+              <button onClick={onLogin} className="hidden sm:block text-sm font-medium text-[#2C1A0E] hover:text-[#7C4A2D] transition-colors px-3 py-2">
+                Log in
+              </button>
+              <button onClick={onLogin} className="flex items-center gap-1.5 bg-[#E07B39] text-[#FFFDF9] text-sm font-medium px-3 sm:px-4 py-2.5 rounded-full hover:bg-[#CA6A28] transition-colors">
+                <Plus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Post a Job</span>
+                <span className="sm:hidden">Post</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="hidden md:block text-sm text-[#8C7B6E] font-medium">
+                {userType === "worker" ? "Raju Sharma" : "Greenfield Housing"}
+              </span>
+              <button onClick={onLogout} className="flex items-center gap-1.5 text-sm font-medium text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors px-3 py-2">
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+// ─── Homepage ─────────────────────────────────────────────────────────────────
+
+function HomePage({ onLogin, onJobs }: { onLogin: () => void; onJobs: () => void }) {
+  const [filter, setFilter] = useState<JobFilter>("All");
+  const [search, setSearch] = useState("");
+  const filters: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
+
+  const filtered = JOBS.filter((j) => {
+    const matchType = filter === "All" || j.type === filter;
+    const q = search.toLowerCase();
+    const matchSearch = !q || j.title.toLowerCase().includes(q) || j.employer.toLowerCase().includes(q) || j.skills.some((s) => s.toLowerCase().includes(q));
+    return matchType && matchSearch;
+  });
+
+  return (
+    <main>
+      {/* Hero */}
+      <section className="relative overflow-hidden border-b border-[#E8DDD4]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 bg-[#A3B899]/25 text-[#3D6858] text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full mb-6">
+              <MapPin className="w-3.5 h-3.5" /> {CITY} &amp; surrounding areas
+            </div>
+            <h1 className="font-['Fraunces'] text-4xl sm:text-5xl lg:text-[56px] font-bold text-[#7C4A2D] leading-[1.1] mb-5">
+              Work is waiting.<br />
+              <em className="font-normal">Right here in {CITY}.</em>
+            </h1>
+            <p className="text-[#8C7B6E] text-lg leading-relaxed mb-8 max-w-[420px]">
+              Find honest work close to home. Connect with local businesses that need you — no middlemen, no nonsense.
+            </p>
+            <div className="flex gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-2 shadow-[0_2px_12px_rgba(44,26,14,0.08)] max-w-md">
+              <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                <Search className="w-4 h-4 text-[#8C7B6E] flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search jobs, skills, employers…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="flex-1 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none min-w-0"
+                />
+                {search && (
+                  <button onClick={() => setSearch("")} className="text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <button className="bg-[#E07B39] text-[#FFFDF9] px-4 sm:px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#CA6A28] transition-colors flex-shrink-0">
+                Search
+              </button>
+            </div>
+          </div>
+          <div className="hidden lg:flex h-64 xl:h-72 items-end justify-center">
+            <NeighbourhoodIllustration />
+          </div>
+        </div>
+      </section>
+
+      {/* Filters + Listings */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2">
+            {filters.map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-4 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all duration-150 ${
+                  filter === f
+                    ? "bg-[#7C4A2D] text-[#FAF7F2] shadow-sm"
+                    : "bg-[#FFFDF9] border border-[#E8DDD4] text-[#8C7B6E] hover:border-[#7C4A2D] hover:text-[#7C4A2D]"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-[#8C7B6E]">{filtered.length} openings</span>
+            <button onClick={onJobs} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1">
+              View all <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {filtered.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {filtered.slice(0, 6).map((job) => <JobCard key={job.id} job={job} />)}
+          </div>
+        ) : (
+          <div className="text-center py-24">
+            <p className="font-['Fraunces'] text-2xl text-[#7C4A2D] mb-2">Nothing found here.</p>
+            <p className="text-sm text-[#8C7B6E]">Try a different search or clear the filter.</p>
+          </div>
+        )}
+
+        {filtered.length > 6 && (
+          <div className="text-center mt-8">
+            <button onClick={onJobs} className="inline-flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] text-[#7C4A2D] font-medium text-sm px-6 py-3 rounded-full hover:bg-[#F0EBE3] hover:border-[#7C4A2D] transition-all shadow-sm">
+              Browse all {JOBS.length} jobs <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[#E8DDD4] bg-[#FFFDF9] mt-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <p className="font-['Fraunces'] text-xl text-[#7C4A2D] italic">
+            Serving {CITY}, one job at a time.
+          </p>
+          <div className="flex gap-6 text-sm text-[#8C7B6E]">
+            <button onClick={onLogin} className="hover:text-[#2C1A0E] transition-colors">Post a Job</button>
+            <button onClick={onJobs} className="hover:text-[#2C1A0E] transition-colors">Browse Jobs</button>
+            <span className="hover:text-[#2C1A0E] transition-colors cursor-pointer">Contact</span>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
+
+// ─── Login / Register ─────────────────────────────────────────────────────────
+
+function LoginPage({ onSuccess }: { onSuccess: (type: "worker" | "employer") => void }) {
+  const [role, setRole] = useState<"worker" | "employer">("worker");
+  const [mode, setMode] = useState<"login" | "register">("register");
+  const [done, setDone] = useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setDone(true);
+    setTimeout(() => onSuccess(role), 1500);
+  }
+
+  return (
+    <main className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-[420px]">
+        {done ? (
+          <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-12 text-center shadow-[0_4px_24px_rgba(44,26,14,0.1)]">
+            <div className="w-16 h-16 bg-[#E6F2E8] rounded-full flex items-center justify-center mx-auto mb-5">
+              <Check className="w-8 h-8 text-[#2D6B3D]" />
+            </div>
+            <h2 className="font-['Fraunces'] text-3xl font-bold text-[#7C4A2D] mb-2">
+              Welcome to the neighbourhood.
+            </h2>
+            <p className="text-[#8C7B6E] text-sm">Taking you to your dashboard…</p>
+          </div>
+        ) : (
+          <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-8 shadow-[0_4px_24px_rgba(44,26,14,0.1)]">
+            <h2 className="font-['Fraunces'] text-3xl font-bold text-[#7C4A2D] mb-1 text-center">
+              {mode === "register" ? "Join LocalGig" : "Welcome back"}
+            </h2>
+            <p className="text-[#8C7B6E] text-sm text-center mb-7">
+              {mode === "register" ? "Find work or find people — it starts here." : "Good to see you again."}
+            </p>
+            <div className="flex bg-[#F0EBE3] rounded-xl p-1 mb-6">
+              {(["worker", "employer"] as const).map((r) => (
+                <button key={r} onClick={() => setRole(r)}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${role === r ? "bg-[#FFFDF9] text-[#7C4A2D] shadow-sm border border-[#E8DDD4]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"}`}>
+                  {r === "worker" ? "I need work" : "I'm hiring"}
+                </button>
+              ))}
+            </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Your name</label>
+                <input type="text" required placeholder={role === "worker" ? "Raju Sharma" : "Anita Mehta"}
+                  className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+              </div>
+              {role === "employer" && mode === "register" && (
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Business name</label>
+                  <input type="text" required placeholder="Sunrise Dhaba"
+                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Phone number</label>
+                <input type="tel" required placeholder="+91 98765 43210"
+                  className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+              </div>
+              {role === "employer" && mode === "register" && (
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Business phone</label>
+                  <input type="tel" placeholder="+91 80000 00000"
+                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                </div>
+              )}
+              <button type="submit" className="w-full bg-[#E07B39] text-[#FFFDF9] py-3.5 rounded-xl text-sm font-semibold hover:bg-[#CA6A28] transition-colors mt-1">
+                {mode === "register" ? "Create account" : "Log in"}
+              </button>
+            </form>
+            <p className="text-center text-sm text-[#8C7B6E] mt-5">
+              {mode === "register" ? "Already on LocalGig?" : "New here?"}{" "}
+              <button onClick={() => setMode(mode === "register" ? "login" : "register")} className="text-[#7C4A2D] font-medium hover:underline underline-offset-2">
+                {mode === "register" ? "Log in" : "Create account"}
+              </button>
+            </p>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// ─── Worker Dashboard ─────────────────────────────────────────────────────────
+
+function WorkerDashboard({ onBrowseJobs }: { onBrowseJobs: () => void }) {
+  const [tab, setTab] = useState<WorkerTab>("browse");
+  const [filter, setFilter] = useState<JobFilter>("All");
+  const [appliedIds, setAppliedIds] = useState<Set<number>>(new Set([2, 3, 4]));
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("Raju Sharma");
+  const [phone, setPhone] = useState("+91 98765 43210");
+  const [skills, setSkills] = useState(["Plumbing", "Pipe fitting", "Electrical basics"]);
+  const [newSkill, setNewSkill] = useState("");
+
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const filtered = filter === "All" ? JOBS : JOBS.filter((j) => j.type === filter);
+
+  function addSkill() {
+    const t = newSkill.trim();
+    if (t && !skills.includes(t)) setSkills((p) => [...p, t]);
+    setNewSkill("");
+  }
+
+  const TABS: { key: WorkerTab; label: string }[] = [
+    { key: "browse", label: "Browse Jobs" },
+    { key: "applications", label: "My Applications" },
+    { key: "profile", label: "Profile" },
+  ];
+
+  return (
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="mb-8">
+        <h1 className="font-['Fraunces'] text-3xl sm:text-4xl font-bold text-[#7C4A2D] leading-snug">
+          {greeting}, {name.split(" ")[0]}.{" "}
+          <em className="font-normal">{"Here's what's available today."}</em>
+        </h1>
+        <p className="text-[#8C7B6E] mt-1.5">{filtered.length} jobs open in {CITY}</p>
+      </div>
+
+      <div className="flex gap-1 bg-[#F0EBE3] rounded-xl p-1 mb-8 w-fit overflow-x-auto">
+        {TABS.map(({ key, label }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`px-3 sm:px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap ${
+              tab === key ? "bg-[#FFFDF9] text-[#7C4A2D] shadow-sm border border-[#E8DDD4]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Browse */}
+      {tab === "browse" && (
+        <>
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
+              {(["All", "Full-time", "Part-time", "Gig"] as JobFilter[]).map((f) => (
+                <button key={f} onClick={() => setFilter(f)}
+                  className={`px-4 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all ${
+                    filter === f ? "bg-[#7C4A2D] text-[#FAF7F2] shadow-sm" : "bg-[#FFFDF9] border border-[#E8DDD4] text-[#8C7B6E] hover:border-[#7C4A2D] hover:text-[#7C4A2D]"
+                  }`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+            <button onClick={onBrowseJobs} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1">
+              Full search <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {filtered.map((job) => (
+              <JobCard key={job.id} job={job} applied={appliedIds.has(job.id)} onApply={() => setAppliedIds((p) => new Set([...p, job.id]))} showApplyButton />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Applications */}
+      {tab === "applications" && (
+        <div className="flex flex-col gap-4 max-w-2xl">
+          {MY_APPLICATIONS.map((app) => {
+            const stepIdx = STATUS_FLOW.indexOf(app.status);
+            return (
+              <div key={app.id} className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
+                  <div>
+                    <h3 className="font-['Fraunces'] font-bold text-lg text-[#7C4A2D]">{app.title}</h3>
+                    <p className="text-sm text-[#8C7B6E] mt-0.5">{app.employer} &middot; Applied {app.appliedDate}</p>
+                  </div>
+                  <span className={`flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-full uppercase tracking-wider ${statusStyle(app.status)}`}>
+                    {app.status}
+                  </span>
+                </div>
+                <div className="flex items-start overflow-x-auto pb-1">
+                  {STATUS_FLOW.map((step, i) => {
+                    const done = i <= stepIdx;
+                    const current = i === stepIdx;
+                    return (
+                      <div key={step} className="flex items-start flex-1 min-w-[60px]">
+                        <div className="flex flex-col items-center">
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${done ? "border-[#6A9E78] bg-[#6A9E78]" : "border-[#E8DDD4] bg-[#FAF7F2]"} ${current ? "ring-2 ring-offset-1 ring-[#6A9E78]/40" : ""}`}>
+                            {done && <Check className="w-3 h-3 text-white" />}
+                          </div>
+                          <span className={`text-[10px] font-medium mt-1.5 text-center leading-tight max-w-[52px] ${done ? "text-[#3D6B4F]" : "text-[#8C7B6E]"}`}>{step}</span>
+                        </div>
+                        {i < STATUS_FLOW.length - 1 && (
+                          <div className={`flex-1 h-0.5 mt-3 mx-1 transition-all duration-300 min-w-[20px] ${i < stepIdx ? "bg-[#6A9E78]" : "bg-[#E8DDD4]"}`} />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Profile */}
+      {tab === "profile" && (
+        <div className="max-w-md">
+          <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-7 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D]">My Profile</h2>
+              <button onClick={() => setEditing(!editing)} className="flex items-center gap-1.5 text-sm font-medium text-[#8C7B6E] hover:text-[#7C4A2D] transition-colors">
+                {editing ? <><Check className="w-4 h-4" /> Save</> : <><Edit2 className="w-4 h-4" /> Edit</>}
+              </button>
+            </div>
+            <div className="flex flex-col gap-5">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Full Name</p>
+                {editing ? (
+                  <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                ) : (
+                  <p className="font-medium text-[#2C1A0E]">{name}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Phone</p>
+                {editing ? (
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2.5 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                ) : (
+                  <p className="font-medium text-[#2C1A0E] flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-[#8C7B6E]" /> {phone}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Skills</p>
+                <div className="flex flex-wrap gap-2">
+                  {skills.map((s) => (
+                    <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#A3B899]/20 text-[#3D6858]">
+                      {s}
+                      {editing && <button onClick={() => setSkills((p) => p.filter((x) => x !== s))} className="hover:text-[#C0503A] transition-colors"><X className="w-3 h-3" /></button>}
+                    </span>
+                  ))}
+                  {editing && (
+                    <div className="flex items-center gap-1.5">
+                      <input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }} placeholder="Add skill…"
+                        className="px-3 py-1.5 bg-[#F0EBE3] border border-dashed border-[#A3B899] rounded-full text-xs text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] w-28" />
+                      <button onClick={addSkill} className="w-7 h-7 bg-[#E07B39] text-[#FFFDF9] rounded-full flex items-center justify-center hover:bg-[#CA6A28] transition-colors">
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="pt-4 border-t border-[#E8DDD4]">
+                <div className="flex items-center gap-2 text-sm text-[#8C7B6E]">
+                  <CheckCircle className="w-4 h-4 text-[#6A9E78]" />
+                  <span>3 applications sent &middot; 1 shortlisted</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+// ─── Employer Dashboard ───────────────────────────────────────────────────────
+
+function EmployerDashboard() {
+  const [tab, setTab] = useState<EmployerTab>("listings");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [listings, setListings] = useState<Listing[]>(EMPLOYER_LISTINGS);
+  const [payType, setPayType] = useState<PayType>("Fixed");
+  const [postedSuccess, setPostedSuccess] = useState(false);
+
+  function updateStatus(listingId: number, applicantId: number, status: ApplicantStatus) {
+    setListings((prev) => prev.map((l) => l.id === listingId ? { ...l, applicants: l.applicants.map((a) => a.id === applicantId ? { ...a, status } : a) } : l));
+  }
+
+  function handlePost(e: React.FormEvent) {
+    e.preventDefault();
+    setPostedSuccess(true);
+    setTimeout(() => { setPostedSuccess(false); setTab("listings"); }, 1500);
+  }
+
+  const activeListing = selectedId !== null ? listings.find((l) => l.id === selectedId) : null;
+  const ACTIONS: { label: string; target: ApplicantStatus }[] = [
+    { label: "Seen", target: "Seen" },
+    { label: "Shortlist", target: "Shortlisted" },
+    { label: "Hire", target: "Hired" },
+    { label: "Decline", target: "Declined" },
+  ];
+
+  return (
+    <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-['Fraunces'] text-3xl sm:text-4xl font-bold text-[#7C4A2D]">Your listings</h1>
+          <p className="text-[#8C7B6E] mt-1">Greenfield Housing Society &middot; {CITY}</p>
+        </div>
+        <button onClick={() => { setTab("post"); setSelectedId(null); }} className="flex items-center gap-1.5 bg-[#E07B39] text-[#FFFDF9] px-5 py-2.5 rounded-full text-sm font-medium hover:bg-[#CA6A28] transition-colors">
+          <Plus className="w-4 h-4" /> Post a Job
+        </button>
+      </div>
+
+      <div className="flex gap-1 bg-[#F0EBE3] rounded-xl p-1 mb-8 w-fit">
+        {(["listings", "post"] as EmployerTab[]).map((t) => (
+          <button key={t} onClick={() => { setTab(t); setSelectedId(null); }}
+            className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${tab === t ? "bg-[#FFFDF9] text-[#7C4A2D] shadow-sm border border-[#E8DDD4]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"}`}>
+            {t === "listings" ? "Your Listings" : "Post a Job"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "listings" && !activeListing && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {listings.map((l) => (
+            <button key={l.id} onClick={() => setSelectedId(l.id)} className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 shadow-sm hover:shadow-[0_4px_20px_rgba(44,26,14,0.12)] hover:-translate-y-0.5 transition-all duration-200 text-left w-full">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h3 className="font-['Fraunces'] font-bold text-[17px] text-[#7C4A2D] leading-snug">{l.title}</h3>
+                  <p className="text-sm text-[#8C7B6E] mt-0.5">{l.pay} &middot; {l.posted}</p>
+                </div>
+                <span className="flex-shrink-0 bg-[#E07B39] text-[#FFFDF9] text-xs font-semibold px-2.5 py-1 rounded-full">{l.applicants.length} applied</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <TypeTag label={l.type} />
+                <span className="text-xs text-[#8C7B6E] flex items-center gap-1 font-medium">View applicants <ChevronRight className="w-3.5 h-3.5" /></span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tab === "listings" && activeListing && (
+        <div>
+          <button onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-[#8C7B6E] hover:text-[#2C1A0E] mb-6 transition-colors font-medium">
+            <ArrowRight className="w-3.5 h-3.5 rotate-180" /> Back to listings
+          </button>
+          <div className="mb-6">
+            <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D]">{activeListing.title}</h2>
+            <p className="text-[#8C7B6E] text-sm mt-1">{activeListing.applicants.length} {activeListing.applicants.length === 1 ? "person" : "people"} applied</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {activeListing.applicants.map((a) => (
+              <div key={a.id} className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <div className="w-9 h-9 bg-[#F0EBE3] rounded-full flex items-center justify-center flex-shrink-0 border border-[#E8DDD4]">
+                        <User className="w-4 h-4 text-[#8C7B6E]" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[#2C1A0E] text-sm">{a.name}</p>
+                        <p className="text-xs text-[#8C7B6E] flex items-center gap-1"><Phone className="w-3 h-3" /> {a.phone}</p>
+                      </div>
+                      <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full uppercase tracking-wider ${statusStyle(a.status)}`}>{a.status}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pl-12">{a.skills.map((s) => <SkillTag key={s} label={s} />)}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {ACTIONS.map(({ label, target }) => {
+                      const isActive = a.status === target;
+                      const isHire = label === "Hire";
+                      const isDecline = label === "Decline";
+                      return (
+                        <button key={label} onClick={() => updateStatus(activeListing.id, a.id, target)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ${
+                            isHire ? (isActive ? "bg-[#2D6B3D] text-white" : "bg-[#E6F2E8] text-[#2D6B3D] hover:bg-[#2D6B3D] hover:text-white")
+                            : isDecline ? (isActive ? "bg-[#C0503A] text-white" : "bg-[#FDE8E5] text-[#C0503A] hover:bg-[#C0503A] hover:text-white")
+                            : isActive ? "bg-[#7C4A2D] text-[#FAF7F2]"
+                            : "bg-[#F0EBE3] text-[#2C1A0E] border border-[#E8DDD4] hover:bg-[#E8DDD4]"
+                          }`}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "post" && (
+        <div className="max-w-xl">
+          {postedSuccess ? (
+            <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-12 text-center shadow-sm">
+              <div className="w-16 h-16 bg-[#E6F2E8] rounded-full flex items-center justify-center mx-auto mb-5">
+                <Check className="w-8 h-8 text-[#2D6B3D]" />
+              </div>
+              <h2 className="font-['Fraunces'] text-3xl font-bold text-[#7C4A2D] mb-1">Job posted!</h2>
+              <p className="text-[#8C7B6E] text-sm">Your listing is now live in {CITY}.</p>
+            </div>
+          ) : (
+            <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-6 sm:p-8 shadow-sm">
+              <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D] mb-1">Tell us about the work</h2>
+              <p className="text-[#8C7B6E] text-sm mb-7">Keep it plain and honest — workers appreciate clarity.</p>
+              <form onSubmit={handlePost} className="flex flex-col gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">What kind of help do you need?</label>
+                  <input required placeholder="e.g. Cook for morning shift, Delivery rider, Plumber"
+                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-2">Full-time, part-time, or a one-off gig?</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["Full-time", "Part-time", "Gig"] as const).map((t) => (
+                      <button key={t} type="button" className="py-2.5 rounded-xl border border-[#E8DDD4] text-sm font-medium text-[#8C7B6E] hover:border-[#7C4A2D] hover:text-[#7C4A2D] hover:bg-[#F5EDE0] transition-all">{t}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-2">{"What will you pay?"}</label>
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {(["Fixed", "Range", "Open to discuss"] as PayType[]).map((p) => (
+                      <button key={p} type="button" onClick={() => setPayType(p)}
+                        className={`py-2.5 rounded-xl border text-xs sm:text-sm font-medium transition-all ${payType === p ? "border-[#7C4A2D] text-[#7C4A2D] bg-[#F5EDE0]" : "border-[#E8DDD4] text-[#8C7B6E] hover:border-[#7C4A2D] hover:text-[#7C4A2D]"}`}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                  {payType !== "Open to discuss" && (
+                    <div className="flex gap-2">
+                      <input placeholder={payType === "Range" ? "Min (e.g. ₹500)" : "Amount (e.g. ₹18,000)"}
+                        className="flex-1 px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                      {payType === "Range" && (
+                        <input placeholder="Max (e.g. ₹800)"
+                          className="flex-1 px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">What skills or experience matters?</label>
+                  <input placeholder="e.g. Cooking, Driving licence, Heavy lifting"
+                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Anything else to know?</label>
+                  <textarea rows={3} placeholder="Working hours, location, anything specific…"
+                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors resize-none" />
+                </div>
+                <button type="submit" className="w-full bg-[#E07B39] text-[#FFFDF9] py-3.5 rounded-xl text-sm font-semibold hover:bg-[#CA6A28] transition-colors mt-1">
+                  Post this job
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
+    </main>
+  );
+}
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [view, setView] = useState<View>("home");
+  const [userType, setUserType] = useState<"worker" | "employer" | null>(null);
+
+  function handleLoginSuccess(type: "worker" | "employer") {
+    setUserType(type);
+    setView(type === "worker" ? "worker" : "employer");
+  }
+
+  return (
+    <div className="min-h-screen bg-[#FAF7F2] text-[#2C1A0E]" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <PaperTexture />
+      <div className="relative z-10">
+        <Navbar
+          view={view}
+          onHome={() => setView("home")}
+          onJobs={() => setView("jobs")}
+          onLogin={() => setView("login")}
+          onLogout={() => { setUserType(null); setView("home"); }}
+          userType={userType}
+        />
+        {view === "home"     && <HomePage onLogin={() => setView("login")} onJobs={() => setView("jobs")} />}
+        {view === "jobs"     && <JobsPage />}
+        {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} />}
+        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => setView("jobs")} />}
+        {view === "employer" && <EmployerDashboard />}
+      </div>
+    </div>
+  );
+}

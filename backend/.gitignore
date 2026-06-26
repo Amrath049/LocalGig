@@ -1,0 +1,26 @@
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+/build
+
+# Logs
+*.log
+npm-debug.log*
+
+# Env files (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Test/coverage
+/coverage
+
+# IDE / OS
+.idea
+.DS_Store
+*.swp
+
+# Prisma
+prisma/*.db
