@@ -5,7 +5,8 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Job, JobType, User } from '@prisma/client';
+import { Job, User } from '@prisma/client';
+import { JobStatus, JobType } from '../common/enums';
 import Redis from 'ioredis';
 import { SearchRepository } from './search.repository';
 
@@ -72,13 +73,45 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     return { indexed: jobs.length };
   }
 
-  async searchJobs(filters: { type?: string; search?: string }) {
+  async searchJobs(filters: {
+    type?: string;
+    search?: string;
+    posted?: string;
+    skills?: string;
+    sort?: string;
+  }) {
     const filter: Array<Record<string, unknown>> = [
-      { term: { status: 'OPEN' } },
+      { term: { status: JobStatus.OPEN } },
     ];
 
     if (filters.type) {
       filter.push({ term: { type: filters.type } });
+    }
+
+    if (filters.posted && filters.posted !== 'Any time') {
+      let gteValue = '';
+      if (filters.posted === 'Today') gteValue = 'now-1d/d';
+      else if (filters.posted === 'Last 3 days') gteValue = 'now-3d/d';
+      else if (filters.posted === 'This week') gteValue = 'now-7d/d';
+
+      if (gteValue) {
+        filter.push({
+          range: {
+            createdAt: { gte: gteValue },
+          },
+        });
+      }
+    }
+
+    if (filters.skills) {
+      const skillsList = filters.skills.split(',').map((s) => s.trim()).filter(Boolean);
+      if (skillsList.length > 0) {
+        filter.push({
+          terms: {
+            skills: skillsList,
+          },
+        });
+      }
     }
 
     // Build a robust search that supports fuzzy matches, prefix matches and
@@ -96,15 +129,6 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
           max_expansions: 50,
         },
       });
-
-      // Prefix search on title/description for partial matches
-      // should.push({
-      //   multi_match: {
-      //     query: filters.search,
-      //     fields: ['title^3', 'description'],
-      //     type: 'phrase_prefix',
-      //   },
-      // });
 
       // Individual fuzzy field matches to increase recall for typos
       should.push({
@@ -126,9 +150,11 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
+    const sortOrder = filters.sort === 'oldest' ? 'asc' : 'desc';
+
     const body: Record<string, unknown> = {
       size: 50,
-      sort: [{ createdAt: { order: 'desc' } }],
+      sort: [{ createdAt: { order: sortOrder } }],
       query: {
         bool: {
           filter,
@@ -162,7 +188,7 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
         }
 
         const job = await this.searchRepository.findJobForIndex(message.jobId);
-        if (!job || job.status !== 'OPEN') {
+        if (!job || job.status !== JobStatus.OPEN) {
           await this.removeJob(message.jobId);
           continue;
         }

@@ -22,9 +22,9 @@ import type { ApiUserProfile } from "../lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type View = "home" | "login" | "worker" | "employer" | "jobs";
+type View = "home" | "login" | "worker" | "employer" | "jobs" | "profile";
 type JobFilter = "All" | "Full-time" | "Part-time" | "Gig";
-type WorkerTab = "browse" | "applications" | "profile";
+type WorkerTab = "browse" | "applications";
 type EmployerTab = "listings" | "post";
 type PayType = "Fixed" | "Range" | "Open to discuss";
 type AppStatus = "Applied" | "Seen" | "Shortlisted" | "Hired";
@@ -50,11 +50,14 @@ function apiJobToUiJob(job: any): Job {
     FULL_TIME: "Full-time",
     PART_TIME: "Part-time",
     GIG: "Gig",
+    full_time: "Full-time",
+    part_time: "Part-time",
+    gig: "Gig",
   };
 
-  const pay = job.payType === "FIXED"
+  const pay = (job.payType === "FIXED" || job.payType === "fixed")
     ? `₹${job.payAmount ?? 0} / month`
-    : job.payType === "RANGE"
+    : (job.payType === "RANGE" || job.payType === "range")
     ? `₹${job.payMin ?? 0}–${job.payMax ?? 0}`
     : job.payCustom || "Open to discuss";
 
@@ -75,13 +78,17 @@ function apiJobToUiJob(job: any): Job {
 
 function apiStatusToUiStatus(status: string): AppStatus {
   const statusMap: Record<string, AppStatus> = {
+    applied: "Applied",
+    seen: "Seen",
+    shortlisted: "Shortlisted",
+    hired: "Hired",
     APPLIED: "Applied",
     SEEN: "Seen",
     SHORTLISTED: "Shortlisted",
     HIRED: "Hired",
   };
 
-  return statusMap[status] ?? "Applied";
+  return statusMap[status] ?? statusMap[status.toLowerCase()] ?? "Applied";
 }
 
 function apiApplicationToUiApplication(application: any): MyApplication {
@@ -99,11 +106,14 @@ function apiJobToListing(job: any): Listing {
     FULL_TIME: "Full-time",
     PART_TIME: "Part-time",
     GIG: "Gig",
+    full_time: "Full-time",
+    part_time: "Part-time",
+    gig: "Gig",
   };
 
-  const pay = job.payType === "FIXED"
+  const pay = (job.payType === "FIXED" || job.payType === "fixed")
     ? `₹${job.payAmount ?? 0} / month`
-    : job.payType === "RANGE"
+    : (job.payType === "RANGE" || job.payType === "range")
     ? `₹${job.payMin ?? 0}–${job.payMax ?? 0}`
     : job.payCustom || "Open to discuss";
 
@@ -348,7 +358,6 @@ function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadg
 
 interface FilterState {
   jobType: JobFilter;
-  pay: string;
   posted: string;
   skills: string[];
   sort: SortOption;
@@ -362,7 +371,6 @@ interface FilterPanelProps {
   skills: string[];
 }
 
-const PAY_OPTIONS = ["Any", "Under ₹10k", "₹10k – ₹20k", "₹20k+", "Open to discuss"];
 const POSTED_OPTIONS = ["Any time", "Today", "Last 3 days", "This week"];
 const JOB_TYPES: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
 
@@ -378,7 +386,6 @@ function FilterPanel({ filters, onChange, onReset, resultCount, skills }: Filter
 
   const hasActive =
     filters.jobType !== "All" ||
-    filters.pay !== "Any" ||
     filters.posted !== "Any time" ||
     filters.skills.length > 0;
 
@@ -410,27 +417,6 @@ function FilterPanel({ filters, onChange, onReset, resultCount, skills }: Filter
             >
               {t}
               {filters.jobType === t && <Check className="w-3.5 h-3.5" />}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Pay */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Pay range</p>
-        <div className="flex flex-col gap-1.5">
-          {PAY_OPTIONS.map((p) => (
-            <button
-              key={p}
-              onClick={() => set("pay", p)}
-              className={`flex items-center justify-between w-full px-3 py-2 rounded-xl text-sm transition-all text-left ${
-                filters.pay === p
-                  ? "bg-[#7C4A2D] text-[#FAF7F2] font-medium"
-                  : "text-[#2C1A0E] hover:bg-[#F0EBE3]"
-              }`}
-            >
-              {p}
-              {filters.pay === p && <Check className="w-3.5 h-3.5" />}
             </button>
           ))}
         </div>
@@ -494,44 +480,20 @@ function FilterPanel({ filters, onChange, onReset, resultCount, skills }: Filter
 
 const DEFAULT_FILTERS: FilterState = {
   jobType: "All",
-  pay: "Any",
   posted: "Any time",
   skills: [],
   sort: "newest",
 };
-
-function applyFilters(jobs: Job[], f: FilterState, search: string): Job[] {
-  return jobs
-    .filter((j) => {
-      if (f.jobType !== "All" && j.type !== f.jobType) return false;
-
-      if (f.pay === "Under ₹10k" && (j.payValue === 0 || j.payValue >= 10000)) return false;
-      if (f.pay === "₹10k – ₹20k" && (j.payValue < 10000 || j.payValue > 20000)) return false;
-      if (f.pay === "₹20k+" && j.payValue < 20000) return false;
-      if (f.pay === "Open to discuss" && j.payValue !== 0) return false;
-
-      if (f.posted === "Today" && j.postedDays > 0) return false;
-      if (f.posted === "Last 3 days" && j.postedDays > 3) return false;
-      if (f.posted === "This week" && j.postedDays > 7) return false;
-
-      if (f.skills.length > 0 && !f.skills.some((s) => j.skills.includes(s))) return false;
-
-      if (search) {
-        const q = search.toLowerCase();
-        if (!j.title.toLowerCase().includes(q) && !j.employer.toLowerCase().includes(q) && !j.skills.some((s) => s.toLowerCase().includes(q)) && !j.location.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => f.sort === "newest" ? a.postedDays - b.postedDays : b.postedDays - a.postedDays);
-}
 
 function JobsPage({
   jobs,
   isLoading,
   search,
   onSearchChange,
-  jobTypeFilter,
-  onJobTypeFilterChange,
+  filters,
+  onFiltersChange,
+  onResetFilters,
+  skills,
   appliedIds,
   onApply,
   userRole,
@@ -540,27 +502,22 @@ function JobsPage({
   isLoading: boolean;
   search: string;
   onSearchChange: (query: string) => void;
-  jobTypeFilter?: string;
-  onJobTypeFilterChange: (type?: string) => void;
+  filters: FilterState;
+  onFiltersChange: (f: FilterState) => void;
+  onResetFilters: () => void;
+  skills: string[];
   appliedIds: Set<string>;
   onApply: (jobId: string) => void;
   userRole: string | null;
 }) {
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  const results = applyFilters(jobs, filters, "");
+  const results = jobs;
 
   const activeFilterCount =
     (filters.jobType !== "All" ? 1 : 0) +
-    (filters.pay !== "Any" ? 1 : 0) +
     (filters.posted !== "Any time" ? 1 : 0) +
     filters.skills.length;
-
-  function resetFilters() {
-    setFilters(DEFAULT_FILTERS);
-    onJobTypeFilterChange(undefined);
-  }
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
@@ -594,7 +551,7 @@ function JobsPage({
         <div className="relative">
           <select
             value={filters.sort}
-            onChange={(e) => setFilters({ ...filters, sort: e.target.value as SortOption })}
+            onChange={(e) => onFiltersChange({ ...filters, sort: e.target.value as SortOption })}
             className="appearance-none bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 pr-8 text-sm text-[#2C1A0E] outline-none cursor-pointer hover:border-[#7C4A2D] transition-colors shadow-sm"
           >
             <option value="newest">Newest first</option>
@@ -624,28 +581,22 @@ function JobsPage({
           {filters.jobType !== "All" && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
               {filters.jobType}
-              <button onClick={() => setFilters({ ...filters, jobType: "All" })}><X className="w-3 h-3" /></button>
-            </span>
-          )}
-          {filters.pay !== "Any" && (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
-              {filters.pay}
-              <button onClick={() => setFilters({ ...filters, pay: "Any" })}><X className="w-3 h-3" /></button>
+              <button onClick={() => onFiltersChange({ ...filters, jobType: "All" })}><X className="w-3 h-3" /></button>
             </span>
           )}
           {filters.posted !== "Any time" && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#7C4A2D] text-[#FAF7F2] rounded-full text-xs font-medium">
               {filters.posted}
-              <button onClick={() => setFilters({ ...filters, posted: "Any time" })}><X className="w-3 h-3" /></button>
+              <button onClick={() => onFiltersChange({ ...filters, posted: "Any time" })}><X className="w-3 h-3" /></button>
             </span>
           )}
           {filters.skills.map((s) => (
             <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#A3B899] text-white rounded-full text-xs font-medium">
               {s}
-              <button onClick={() => setFilters({ ...filters, skills: filters.skills.filter((x) => x !== s) })}><X className="w-3 h-3" /></button>
+              <button onClick={() => onFiltersChange({ ...filters, skills: filters.skills.filter((x) => x !== s) })}><X className="w-3 h-3" /></button>
             </span>
           ))}
-          <button onClick={resetFilters} className="text-xs font-medium text-[#8C7B6E] hover:text-[#2C1A0E] px-2 py-1.5 transition-colors">
+          <button onClick={onResetFilters} className="text-xs font-medium text-[#8C7B6E] hover:text-[#2C1A0E] px-2 py-1.5 transition-colors">
             Clear all
           </button>
         </div>
@@ -658,10 +609,10 @@ function JobsPage({
           <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 shadow-sm">
             <FilterPanel
               filters={filters}
-              onChange={setFilters}
-              onReset={resetFilters}
+              onChange={onFiltersChange}
+              onReset={onResetFilters}
               resultCount={results.length}
-              skills={getUniqueSkills(jobs)}
+              skills={skills}
             />
           </div>
         </aside>
@@ -676,11 +627,11 @@ function JobsPage({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {results.map((job) => (
                   <JobCard
-                    key={job.id}
-                    job={job}
-                    showApplyButton={userRole !== "EMPLOYER"}
-                    applied={appliedIds.has(String(job.id))}
-                    onApply={() => onApply(String(job.id))}
+                     key={job.id}
+                     job={job}
+                     showApplyButton={userRole !== "EMPLOYER"}
+                     applied={appliedIds.has(String(job.id))}
+                     onApply={() => onApply(String(job.id))}
                   />
                 ))}
               </div>
@@ -692,7 +643,7 @@ function JobsPage({
               </div>
               <p className="font-['Fraunces'] text-2xl text-[#7C4A2D] mb-2">No jobs match this.</p>
               <p className="text-sm text-[#8C7B6E] mb-4">Try loosening the filters or searching something different.</p>
-              <button onClick={resetFilters} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors">
+              <button onClick={onResetFilters} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors">
                 Reset all filters
               </button>
             </div>
@@ -725,10 +676,10 @@ function JobsPage({
             <div className="flex-1 overflow-y-auto px-5 py-5">
               <FilterPanel
                 filters={filters}
-                onChange={setFilters}
-                onReset={resetFilters}
+                onChange={onFiltersChange}
+                onReset={onResetFilters}
                 resultCount={results.length}
-                skills={getUniqueSkills(jobs)}
+                skills={skills}
               />
             </div>
             {/* Apply button */}
@@ -753,14 +704,14 @@ interface NavbarProps {
   view: View;
   onHome: () => void;
   onJobs: () => void;
-  onLogin: () => void;
-  onLogout: () => void;
+  onLogin: (mode: "login" | "register", role: "worker" | "employer") => void;
   onDashboard: () => void;
+  onProfileClick: () => void;
   userType: "worker" | "employer" | null;
   profile: ApiUserProfile | null;
 }
 
-function Navbar({ view, onHome, onJobs, onLogin, onLogout, onDashboard, userType, profile }: NavbarProps) {
+function Navbar({ view, onHome, onJobs, onLogin, onDashboard, onProfileClick, userType, profile }: NavbarProps) {
   const isLoggedIn = profile !== null;
   const displayName =
     profile?.workerProfile?.name ||
@@ -775,6 +726,8 @@ function Navbar({ view, onHome, onJobs, onLogin, onLogout, onDashboard, userType
           <button onClick={onHome} className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D] tracking-tight hover:opacity-75 transition-opacity flex-shrink-0">
             LocalGig
           </button>
+        </div>
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
             onClick={onJobs}
             className={`hidden sm:flex items-center gap-1.5 text-sm font-medium transition-colors ${
@@ -783,39 +736,39 @@ function Navbar({ view, onHome, onJobs, onLogin, onLogout, onDashboard, userType
           >
             <Briefcase className="w-4 h-4" /> Browse Jobs
           </button>
+
           {isLoggedIn && (
             <button
               onClick={onDashboard}
-              className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${
+              className={`hidden sm:flex items-center gap-1.5 text-sm font-medium transition-colors ${
                 view === "worker" || view === "employer" ? "text-[#7C4A2D]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"
               }`}
             >
               <User className="w-4 h-4" /> Dashboard
             </button>
           )}
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3">
+
           {!isLoggedIn ? (
             <>
-              <button onClick={onLogin} className="hidden sm:block text-sm font-medium text-[#2C1A0E] hover:text-[#7C4A2D] transition-colors px-3 py-2">
+              <button onClick={() => onLogin("login", "worker")} className="hidden sm:block text-sm font-medium text-[#2C1A0E] hover:text-[#7C4A2D] transition-colors px-3 py-2">
                 Log in
               </button>
-              <button onClick={onLogin} className="flex items-center gap-1.5 bg-[#E07B39] text-[#FFFDF9] text-sm font-medium px-3 sm:px-4 py-2.5 rounded-full hover:bg-[#CA6A28] transition-colors">
+              <button onClick={() => onLogin("register", "employer")} className="flex items-center gap-1.5 bg-[#E07B39] text-[#FFFDF9] text-sm font-medium px-3 sm:px-4 py-2.5 rounded-full hover:bg-[#CA6A28] transition-colors">
                 <Plus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Post a Job</span>
                 <span className="sm:hidden">Post</span>
               </button>
             </>
           ) : (
-            <>
-              <span className="hidden md:block text-sm text-[#8C7B6E] font-medium">
-                {displayName}
-              </span>
-              <button onClick={onLogout} className="flex items-center gap-1.5 text-sm font-medium text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors px-3 py-2">
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
-            </>
+            <button
+              onClick={onProfileClick}
+              className={`text-sm font-medium hover:text-[#7C4A2D] transition-colors px-3 py-2 flex items-center gap-1.5 ${
+                view === "profile" ? "text-[#7C4A2D] underline underline-offset-4 font-semibold" : "text-[#8C7B6E]"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#6A9E78] inline-block" />
+              {displayName}
+            </button>
           )}
         </div>
       </div>
@@ -834,7 +787,7 @@ function HomePage({
   onApply,
   userRole,
 }: {
-  onLogin: () => void;
+  onLogin: (mode: "login" | "register", role: "worker" | "employer") => void;
   onJobs: () => void;
   onSearch: (query: string) => void;
   jobs: Job[];
@@ -958,7 +911,7 @@ function HomePage({
             Serving {CITY}, one job at a time.
           </p>
           <div className="flex gap-6 text-sm text-[#8C7B6E]">
-            <button onClick={onLogin} className="hover:text-[#2C1A0E] transition-colors">Post a Job</button>
+            <button onClick={() => onLogin("register", "employer")} className="hover:text-[#2C1A0E] transition-colors">Post a Job</button>
             <button onClick={onJobs} className="hover:text-[#2C1A0E] transition-colors">Browse Jobs</button>
             <span className="hover:text-[#2C1A0E] transition-colors cursor-pointer">Contact</span>
           </div>
@@ -970,9 +923,21 @@ function HomePage({
 
 // ─── Login / Register ─────────────────────────────────────────────────────────
 
-function LoginPage({ onSuccess, authError, setAuthError }: { onSuccess: (type: "worker" | "employer", accessToken: string) => void; authError: string | null; setAuthError: (value: string | null) => void; }) {
-  const [role, setRole] = useState<"worker" | "employer">("worker");
-  const [mode, setMode] = useState<"login" | "register">("register");
+function LoginPage({
+  onSuccess,
+  authError,
+  setAuthError,
+  initialMode = "login",
+  initialRole = "worker",
+}: {
+  onSuccess: (type: "worker" | "employer", accessToken: string) => void;
+  authError: string | null;
+  setAuthError: (value: string | null) => void;
+  initialMode?: "login" | "register";
+  initialRole?: "worker" | "employer";
+}) {
+  const [role, setRole] = useState<"worker" | "employer">(initialRole);
+  const [mode, setMode] = useState<"login" | "register">(initialMode);
   const [verificationPending, setVerificationPending] = useState(false);
   const [done, setDone] = useState(false);
   const [email, setEmail] = useState("");
@@ -983,6 +948,29 @@ function LoginPage({ onSuccess, authError, setAuthError }: { onSuccess: (type: "
   const [businessName, setBusinessName] = useState("");
   const [employerPhone, setEmployerPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setMode(initialMode);
+    setAuthError(null);
+  }, [initialMode, setAuthError]);
+
+  useEffect(() => {
+    setRole(initialRole);
+    setAuthError(null);
+  }, [initialRole, setAuthError]);
+
+  useEffect(() => {
+    if (authError) {
+      const timer = setTimeout(() => {
+        setAuthError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [authError, setAuthError]);
+
+  useEffect(() => {
+    setAuthError(null);
+  }, [email, password, otp, name, phone, businessName, employerPhone, mode, role, setAuthError]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1234,63 +1222,16 @@ function WorkerDashboard({
 }) {
   const [tab, setTab] = useState<WorkerTab>("browse");
   const [filter, setFilter] = useState<JobFilter>("All");
-  const [editing, setEditing] = useState(false);
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [profileMessage, setProfileMessage] = useState<string | null>(null);
-  const [name, setName] = useState(profile?.workerProfile?.name ?? "");
-  const [phone, setPhone] = useState(profile?.workerProfile?.phone ?? "");
-  const [skills, setSkills] = useState<string[]>(profile?.workerProfile?.skillTags ?? []);
-  const [newSkill, setNewSkill] = useState("");
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const firstName = name.trim().split(" ")[0] || "there";
+  const firstName = (profile?.workerProfile?.name || profile?.email || "there").trim().split(" ")[0];
   const filtered = filter === "All" ? jobs : jobs.filter((j) => j.type === filter);
-
-  useEffect(() => {
-    if (profile?.workerProfile) {
-      setName(profile.workerProfile.name);
-      setPhone(profile.workerProfile.phone);
-      setSkills(profile.workerProfile.skillTags ?? []);
-    }
-  }, [profile]);
-
-  async function handleSaveProfile() {
-    if (!token) return;
-    setSavingProfile(true);
-    setProfileMessage(null);
-
-    try {
-      await updateProfile(token, {
-        name,
-        phone,
-        skillTags: skills,
-      });
-      setProfileMessage("Profile updated successfully.");
-      setEditing(false);
-    } catch (error) {
-      console.error("Failed to update profile", error);
-      setProfileMessage("Unable to save your changes.");
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  function addSkill() {
-    const t = newSkill.trim();
-    if (t && !skills.includes(t)) setSkills((p) => [...p, t]);
-    setNewSkill("");
-  }
 
   const TABS: { key: WorkerTab; label: string }[] = [
     { key: "browse", label: "Browse Jobs" },
     { key: "applications", label: "My Applications" },
-    { key: "profile", label: "Profile" },
   ];
-  const applicationCount = applications.length;
-  const shortlistedCount = applications.filter(
-    (application) => application.status === "Shortlisted",
-  ).length;
 
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
@@ -1392,72 +1333,6 @@ function WorkerDashboard({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Profile */}
-      {tab === "profile" && (
-        <div className="max-w-md">
-          <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-7 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D]">My Profile</h2>
-              <button onClick={() => {
-                if (editing) {
-                  handleSaveProfile();
-                } else {
-                  setEditing(true);
-                }
-              }} className="flex items-center gap-1.5 text-sm font-medium text-[#8C7B6E] hover:text-[#7C4A2D] transition-colors">
-                {editing ? <><Check className="w-4 h-4" /> Save</> : <><Edit2 className="w-4 h-4" /> Edit</>}
-              </button>
-            </div>
-            <div className="flex flex-col gap-5">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Full Name</p>
-                {editing ? (
-                  <input value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors" />
-                ) : (
-                  <p className="font-medium text-[#2C1A0E]">{name}</p>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Phone</p>
-                {editing ? (
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full px-4 py-2.5 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors" />
-                ) : (
-                  <p className="font-medium text-[#2C1A0E] flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-[#8C7B6E]" /> {phone}</p>
-                )}
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-[#8C7B6E] mb-2">Skills</p>
-                <div className="flex flex-wrap gap-2">
-                  {skills.map((s) => (
-                    <span key={s} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#A3B899]/20 text-[#3D6858]">
-                      {s}
-                      {editing && <button onClick={() => setSkills((p) => p.filter((x) => x !== s))} className="hover:text-[#C0503A] transition-colors"><X className="w-3 h-3" /></button>}
-                    </span>
-                  ))}
-                  {editing && (
-                    <div className="flex items-center gap-1.5">
-                      <input value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSkill(); } }} placeholder="Add skill…"
-                        className="px-3 py-1.5 bg-[#F0EBE3] border border-dashed border-[#A3B899] rounded-full text-xs text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] w-28" />
-                      <button onClick={addSkill} className="w-7 h-7 bg-[#E07B39] text-[#FFFDF9] rounded-full flex items-center justify-center hover:bg-[#CA6A28] transition-colors">
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="pt-4 border-t border-[#E8DDD4]">
-                <div className="flex items-center gap-2 text-sm text-[#8C7B6E]">
-                  <CheckCircle className="w-4 h-4 text-[#6A9E78]" />
-                  <span>
-                    {applicationCount} {applicationCount === 1 ? "application" : "applications"} sent &middot; {shortlistedCount} shortlisted
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </main>
@@ -1783,6 +1658,189 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
   );
 }
 
+function ProfilePage({
+  token,
+  profile,
+  onLogout,
+  onProfileUpdate,
+}: {
+  token: string | null;
+  profile: ApiUserProfile | null;
+  onLogout: () => void;
+  onProfileUpdate: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [newSkill, setNewSkill] = useState("");
+
+  useEffect(() => {
+    if (profile) {
+      setName(profile.workerProfile?.name || profile.employerProfile?.businessName || "");
+      setPhone(profile.workerProfile?.phone || profile.employerProfile?.phone || "");
+      setSkills(profile.workerProfile?.skillTags ?? []);
+    }
+  }, [profile]);
+
+  async function handleSaveProfile() {
+    if (!token) return;
+    setSavingProfile(true);
+    setProfileMessage(null);
+
+    try {
+      await updateProfile(token, {
+        name: profile?.role === "WORKER" ? name : undefined,
+        businessName: profile?.role === "EMPLOYER" ? name : undefined,
+        phone,
+        skillTags: profile?.role === "WORKER" ? skills : undefined,
+      });
+      setProfileMessage("Profile updated successfully.");
+      setEditing(false);
+      onProfileUpdate();
+    } catch (error) {
+      console.error("Failed to update profile", error);
+      setProfileMessage("Unable to save your changes.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  function addSkill() {
+    const t = newSkill.trim();
+    if (t && !skills.includes(t)) setSkills((p) => [...p, t]);
+    setNewSkill("");
+  }
+
+  return (
+    <main className="max-w-3xl mx-auto px-4 sm:px-6 py-12">
+      <div className="flex items-center justify-between border-b border-[#E8DDD4] pb-6 mb-8">
+        <div>
+          <h1 className="font-['Fraunces'] text-4xl font-bold text-[#7C4A2D]">
+            {profile?.role === "WORKER" ? "My Profile" : "Employer Profile"}
+          </h1>
+          <p className="text-sm text-[#8C7B6E] mt-1">{profile?.email}</p>
+        </div>
+        <button
+          onClick={() => {
+            if (editing) {
+              handleSaveProfile();
+            } else {
+              setEditing(true);
+            }
+          }}
+          disabled={savingProfile}
+          className="flex items-center gap-1.5 bg-[#FFFDF9] border border-[#E8DDD4] hover:bg-[#F0EBE3] px-4 py-2.5 rounded-full text-sm font-medium text-[#7C4A2D] transition-colors cursor-pointer"
+        >
+          {savingProfile ? "Saving..." : editing ? <><Check className="w-4 h-4" /> Save changes</> : <><Edit2 className="w-4 h-4" /> Edit profile</>}
+        </button>
+      </div>
+
+      {profileMessage && (
+        <div className={`mb-6 p-4 rounded-xl text-sm ${profileMessage.includes("success") ? "bg-[#E6F2E8] text-[#2D6B3D] border border-[#6A9E78]/30" : "bg-[#FDE8E5] text-[#C0503A] border border-[#F4C0B6]/30"}`}>
+          {profileMessage}
+        </div>
+      )}
+
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-[#E8DDD4]/50 pb-6">
+          <span className="text-sm font-semibold uppercase tracking-wider text-[#8C7B6E]">Full Name / Business Name</span>
+          <div className="col-span-2">
+            {editing ? (
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full max-w-md px-4 py-3 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors"
+              />
+            ) : (
+              <p className="text-lg font-medium text-[#2C1A0E]">{name || "Not set"}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-[#E8DDD4]/50 pb-6">
+          <span className="text-sm font-semibold uppercase tracking-wider text-[#8C7B6E]">Phone Number</span>
+          <div className="col-span-2">
+            {editing ? (
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full max-w-md px-4 py-3 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] outline-none focus:border-[#7C4A2D] transition-colors"
+              />
+            ) : (
+              <p className="text-lg font-medium text-[#2C1A0E] flex items-center gap-2">
+                <Phone className="w-4 h-4 text-[#8C7B6E]" /> {phone || "Not set"}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {profile?.role === "WORKER" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-[#E8DDD4]/50 pb-6">
+            <span className="text-sm font-semibold uppercase tracking-wider text-[#8C7B6E]">Skill Tags</span>
+            <div className="col-span-2">
+              <div className="flex flex-wrap gap-2">
+                {skills.map((s) => (
+                  <span
+                    key={s}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-[#A3B899]/20 text-[#3D6858]"
+                  >
+                    {s}
+                    {editing && (
+                      <button
+                        onClick={() => setSkills((p) => p.filter((x) => x !== s))}
+                        className="hover:text-[#C0503A] transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+                {editing && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      value={newSkill}
+                      onChange={(e) => setNewSkill(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addSkill();
+                        }
+                      }}
+                      placeholder="Add skill…"
+                      className="px-3 py-1.5 bg-[#FFFDF9] border border-dashed border-[#A3B899] rounded-full text-xs text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] w-32"
+                    />
+                    <button
+                      onClick={addSkill}
+                      className="w-7 h-7 bg-[#E07B39] text-[#FFFDF9] rounded-full flex items-center justify-center hover:bg-[#CA6A28] transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-12 pt-8 border-t border-[#E8DDD4] flex justify-between items-center flex-wrap gap-4">
+        <p className="text-xs text-[#8C7B6E]">
+          Logged in as {profile?.email} ({profile?.role === "WORKER" ? "Worker account" : "Employer account"})
+        </p>
+        <button
+          onClick={onLogout}
+          className="flex items-center gap-2 bg-[#FDE8E5] text-[#C0503A] hover:bg-[#C0503A] hover:text-white border border-[#F4C0B6]/50 px-5 py-3 rounded-full text-sm font-semibold transition-all shadow-sm active:scale-95 cursor-pointer"
+        >
+          <LogOut className="w-4 h-4" /> Sign out from LocalGig
+        </button>
+      </div>
+    </main>
+  );
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1793,17 +1851,35 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isLoadingJobs, setIsLoadingJobs] = useState(false);
   const [jobSearchQuery, setJobSearchQuery] = useState("");
-  const [jobTypeFilter, setJobTypeFilter] = useState<string | undefined>(undefined);
+  const [jobsFilters, setJobsFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [allSkills, setAllSkills] = useState<string[]>([]);
   const [authError, setAuthError] = useState<string | null>(null);
   const [applications, setApplications] = useState<MyApplication[]>([]);
   const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
+  const [loginMode, setLoginMode] = useState<"login" | "register">("login");
+  const [loginRole, setLoginRole] = useState<"worker" | "employer">("worker");
 
   useEffect(() => {
     async function loadJobs() {
       setIsLoadingJobs(true);
       try {
-        const apiJobs = await getJobs(jobTypeFilter, jobSearchQuery);
+        const typeParam = jobsFilters.jobType === "All" ? undefined : (
+          jobsFilters.jobType === "Full-time" ? "FULL_TIME" :
+          jobsFilters.jobType === "Part-time" ? "PART_TIME" :
+          "GIG"
+        );
+        const postedParam = jobsFilters.posted === "Any time" ? undefined : jobsFilters.posted;
+        const skillsParam = jobsFilters.skills.length > 0 ? jobsFilters.skills.join(",") : undefined;
+        const sortParam = jobsFilters.sort;
+
+        const apiJobs = await getJobs(
+          jobSearchQuery,
+          typeParam,
+          postedParam,
+          skillsParam,
+          sortParam,
+        );
         setJobs(apiJobs.map(apiJobToUiJob));
       } catch (error) {
         console.error("Failed to load jobs", error);
@@ -1812,7 +1888,19 @@ export default function App() {
       }
     }
     loadJobs();
-  }, [jobTypeFilter, jobSearchQuery]);
+  }, [jobsFilters, jobSearchQuery]);
+
+  useEffect(() => {
+    async function loadInitialSkills() {
+      try {
+        const apiJobs = await getJobs();
+        setAllSkills(getUniqueSkills(apiJobs.map(apiJobToUiJob)));
+      } catch (error) {
+        console.error("Failed to load initial skills", error);
+      }
+    }
+    loadInitialSkills();
+  }, []);
 
   useEffect(() => {
     async function loadProfile() {
@@ -1887,7 +1975,15 @@ export default function App() {
   }
 
   function handleJobTypeFilterChange(type?: string) {
-    setJobTypeFilter(type);
+    const jobTypeMap: Record<string, JobFilter> = {
+      FULL_TIME: "Full-time",
+      PART_TIME: "Part-time",
+      GIG: "Gig",
+    };
+    setJobsFilters((prev) => ({
+      ...prev,
+      jobType: type ? (jobTypeMap[type] ?? "All") : "All",
+    }));
   }
 
   async function handleLogout() {
@@ -1904,19 +2000,67 @@ export default function App() {
       <div className="relative z-10">
         <Navbar
           view={view}
-          onHome={() => setView("home")}
-          onJobs={() => setView("jobs")}
-          onLogin={() => setView("login")}
+          onHome={() => { setAuthError(null); setView("home"); }}
+          onJobs={() => { setAuthError(null); setView("jobs"); }}
+          onLogin={(mode, role) => {
+            setLoginMode(mode);
+            setLoginRole(role);
+            setAuthError(null);
+            setView("login");
+          }}
           onLogout={handleLogout}
-          onDashboard={() => setView(userType === "worker" ? "worker" : "employer")}
+          onDashboard={() => { setAuthError(null); setView(userType === "worker" ? "worker" : "employer"); }}
+          onProfileClick={() => { setAuthError(null); setView("profile"); }}
           userType={userType}
           profile={profile}
         />
-        {view === "home"     && <HomePage onLogin={() => setView("login")} onJobs={() => setView("jobs")} onSearch={handleJobSearchChange} jobs={jobs} appliedIds={appliedIds} onApply={handleApply} userRole={profile?.role ?? null} />}
-        {view === "jobs"     && <JobsPage jobs={jobs} search={jobSearchQuery} onSearchChange={handleJobSearchChange} jobTypeFilter={jobTypeFilter} onJobTypeFilterChange={handleJobTypeFilterChange} skills={getUniqueSkills(jobs)} isLoading={isLoadingJobs} appliedIds={appliedIds} onApply={handleApply} userRole={profile?.role ?? null} />}
-        {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} />}
-        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => setView("jobs")} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} />}
+        {view === "home"     && (
+          <HomePage
+            onLogin={(mode, role) => {
+              setLoginMode(mode);
+              setLoginRole(role);
+              setAuthError(null);
+              setView("login");
+            }}
+            onJobs={() => { setAuthError(null); setView("jobs"); }}
+            onSearch={handleJobSearchChange}
+            jobs={jobs}
+            appliedIds={appliedIds}
+            onApply={handleApply}
+            userRole={profile?.role ?? null}
+          />
+        )}
+        {view === "jobs"     && (
+          <JobsPage
+            jobs={jobs}
+            isLoading={isLoadingJobs}
+            search={jobSearchQuery}
+            onSearchChange={handleJobSearchChange}
+            filters={jobsFilters}
+            onFiltersChange={setJobsFilters}
+            onResetFilters={() => setJobsFilters(DEFAULT_FILTERS)}
+            skills={allSkills}
+            appliedIds={appliedIds}
+            onApply={handleApply}
+            userRole={profile?.role ?? null}
+          />
+        )}
+        {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} initialMode={loginMode} initialRole={loginRole} />}
+        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => { setAuthError(null); setView("jobs"); }} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} />}
         {view === "employer" && <EmployerDashboard token={token} profile={profile} />}
+        {view === "profile"  && (
+          <ProfilePage
+            token={token}
+            profile={profile}
+            onLogout={handleLogout}
+            onProfileUpdate={async () => {
+              if (token) {
+                const updatedProfile = await getMe(token);
+                setProfile(updatedProfile);
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   );

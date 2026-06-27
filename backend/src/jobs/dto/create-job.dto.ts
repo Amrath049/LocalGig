@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { JobType, PayType } from '@prisma/client';
+import { JobType, PayType } from '../../common/enums';
 
 export class CreateJobDto {
   @IsString()

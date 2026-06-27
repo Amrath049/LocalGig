@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApplicationStatus } from '@prisma/client';
+import { ApplicationStatus, JobStatus } from '../common/enums';
 import { ApplicationsRepository } from './applications.repository';
 import { JobsRepository } from '../jobs/jobs.repository';
 import { CreateApplicationDto } from './dto/create-application.dto';
@@ -17,7 +17,7 @@ export class ApplicationsService {
 
   async apply(workerId: string, dto: CreateApplicationDto) {
     const job = await this.jobsRepository.findJobById(dto.jobId);
-    if (!job || job.status !== 'OPEN') {
+    if (!job || job.status !== JobStatus.OPEN) {
       throw new BadRequestException('Job is not available');
     }
 

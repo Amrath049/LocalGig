@@ -10,38 +10,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ----------------------------------------------------------------
-// Enums
-// ----------------------------------------------------------------
 
-enum JobType {
-  FULL_TIME
-  PART_TIME
-  GIG
-}
 
-// Pay is optional on a Job. When provided, payType describes its shape:
-//   FIXED  -> payAmount
-//   RANGE  -> payMin + payMax
-//   CUSTOM -> payCustom (free-text message)
-enum PayType {
-  FIXED
-  RANGE
-  CUSTOM
-}
 
-enum JobStatus {
-  OPEN
-  CLOSED
-}
-
-enum ApplicationStatus {
-  APPLIED
-  SEEN
-  SHORTLISTED
-  HIRED
-  NOT_SELECTED
-}
 
 // ----------------------------------------------------------------
 // Models
@@ -102,12 +73,12 @@ model Job {
   id          String    @id @default(uuid())
   title       String
   description String
-  type        JobType
+  type        String
   location    String? // area / locality within the city
-  status      JobStatus @default(OPEN)
+  status      String @default("open")
 
   // Optional pay (see PayType enum)
-  payType   PayType?
+  payType   String?
   payAmount Int? // when FIXED
   payMin    Int? // when RANGE
   payMax    Int? // when RANGE
@@ -130,7 +101,7 @@ model Job {
 
 model Application {
   id      String            @id @default(uuid())
-  status  ApplicationStatus @default(APPLIED)
+  status  String @default("applied")
   message String? // optional note from the worker
 
   jobId String

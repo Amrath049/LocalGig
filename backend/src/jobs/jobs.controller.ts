@@ -20,8 +20,14 @@ export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Get()
-  list(@Query('type') type?: string, @Query('search') search?: string) {
-    return this.jobsService.listJobs({ type, search });
+  list(
+    @Query('type') type?: string,
+    @Query('search') search?: string,
+    @Query('posted') posted?: string,
+    @Query('skills') skills?: string,
+    @Query('sort') sort?: string,
+  ) {
+    return this.jobsService.listJobs({ type, search, posted, skills, sort });
   }
 
   @Get('mine')

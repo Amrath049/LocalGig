@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { JobType, PayType } from '@prisma/client';
+import { JobType, PayType } from '../common/enums';
 import { JobsRepository } from './jobs.repository';
 import { CreateJobDto } from './dto/create-job.dto';
 import { SearchService } from '../search/search.service';
@@ -41,8 +41,20 @@ export class JobsService {
     return job;
   }
 
-  async listJobs(filters: { type?: string; search?: string }) {
-    if (filters.search || filters.type) {
+  async listJobs(filters: {
+    type?: string;
+    search?: string;
+    posted?: string;
+    skills?: string;
+    sort?: string;
+  }) {
+    if (
+      filters.search ||
+      filters.type ||
+      filters.posted ||
+      filters.skills ||
+      filters.sort
+    ) {
       try {
         return await this.searchService.searchJobs(filters);
       } catch (error) {

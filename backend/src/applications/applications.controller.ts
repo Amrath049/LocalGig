@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/user.decorator';
-import { ApplicationStatus } from '@prisma/client';
+import { ApplicationStatus } from '../common/enums';
 
 @Controller('applications')
 @UseGuards(JwtAuthGuard, RolesGuard)

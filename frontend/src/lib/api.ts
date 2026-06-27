@@ -83,7 +83,20 @@ async function apiFetch<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${API_URL}${path}`, options);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `${response.status} ${response.statusText}`);
+    let errorMessage = text || `${response.status} ${response.statusText}`;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.message) {
+        if (Array.isArray(parsed.message)) {
+          errorMessage = parsed.message.join(", ");
+        } else {
+          errorMessage = parsed.message;
+        }
+      }
+    } catch {
+      // Fallback to raw text error
+    }
+    throw new Error(errorMessage);
   }
   return (await response.json()) as T;
 }
@@ -119,10 +132,19 @@ export async function getMe(token: string) {
   });
 }
 
-export async function getJobs(type?: string, search?: string) {
+export async function getJobs(
+  search?: string,
+  type?: string,
+  posted?: string,
+  skills?: string,
+  sort?: string,
+) {
   const query = new URLSearchParams();
-  if (type) query.set("type", type);
   if (search) query.set("search", search);
+  if (type) query.set("type", type.toLowerCase());
+  if (posted) query.set("posted", posted);
+  if (skills) query.set("skills", skills);
+  if (sort) query.set("sort", sort);
   const queryString = query.toString();
   return apiFetch<ApiJob[]>(`/jobs${queryString ? `?${queryString}` : ""}`);
 }
@@ -154,10 +176,25 @@ export async function updateApplicationStatus(
   applicationId: string,
   status: string,
 ) {
+  const backendStatusMap: Record<string, string> = {
+    Applied: "applied",
+    Seen: "seen",
+    Shortlisted: "shortlisted",
+    Hired: "hired",
+    NOT_SELECTED: "not_selected",
+    Declined: "not_selected",
+    applied: "applied",
+    seen: "seen",
+    shortlisted: "shortlisted",
+    hired: "hired",
+    not_selected: "not_selected",
+  };
+  const mappedStatus = backendStatusMap[status] ?? status.toLowerCase();
+
   return apiFetch<ApiApplication>(`/applications/${applicationId}/status`, {
     method: "PATCH",
     headers: getHeaders(token, true),
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status: mappedStatus }),
   });
 }
 
@@ -175,10 +212,16 @@ export async function createJob(
     payCustom?: string;
   },
 ) {
+  const backendPayType = payload.payType ? payload.payType.toLowerCase() : undefined;
+  const backendJobType = payload.type ? payload.type.toLowerCase() : undefined;
   return apiFetch<ApiJob>("/jobs", {
     method: "POST",
     headers: getHeaders(token, true),
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      type: backendJobType,
+      payType: backendPayType,
+    }),
   });
 }
 

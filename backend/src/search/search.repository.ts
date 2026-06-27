@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { JobStatus } from '@prisma/client';
+import { JobStatus } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
