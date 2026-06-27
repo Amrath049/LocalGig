@@ -17,6 +17,7 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().required(),
 
   // --- Redis (Phase 1 infra; used from Phase 2/4) ---
+  REDIS_URL: Joi.string().uri().optional(),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().port().default(6379),
 

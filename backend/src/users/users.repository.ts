@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Role, User } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { User, RefreshToken } from '@prisma/client';
+import { PrismaService as DbService } from '../prisma/prisma.service';
 
 /**
  * All DB access for users + their role-specific profiles.
@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Injectable()
 export class UsersRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: DbService) {}
 
   findByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
@@ -16,6 +16,13 @@ export class UsersRepository {
 
   findById(id: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  findByEmailWithProfiles(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: { workerProfile: true, employerProfile: true },
+    });
   }
 
   findByIdWithProfiles(id: string) {
@@ -29,7 +36,7 @@ export class UsersRepository {
   createWithProfile(params: {
     email: string;
     passwordHash: string;
-    role: Role;
+    role: string;
     worker?: { name: string; phone: string; skillTags: string[] };
     employer?: { businessName: string; phone: string };
   }): Promise<User> {
@@ -49,6 +56,70 @@ export class UsersRepository {
     return this.prisma.user.update({
       where: { id },
       data: { isEmailVerified: true },
+    });
+  }
+
+  createRefreshToken(data: {
+    userId: string;
+    tokenHash: string;
+    expiresAt: Date;
+  }) {
+    return this.prisma.refreshToken.create({ data });
+  }
+
+  deleteEmailVerificationOtps(userId: string) {
+    return this.prisma.emailVerificationOtp.deleteMany({
+      where: { userId, consumedAt: null },
+    });
+  }
+
+  createEmailVerificationOtp(data: {
+    userId: string;
+    codeHash: string;
+    expiresAt: Date;
+  }) {
+    return this.prisma.emailVerificationOtp.create({ data });
+  }
+
+  findEmailVerificationOtp(userId: string, codeHash: string) {
+    return this.prisma.emailVerificationOtp.findFirst({
+      where: { userId, codeHash, consumedAt: null },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  consumeEmailVerificationOtp(id: string) {
+    return this.prisma.emailVerificationOtp.update({
+      where: { id },
+      data: { consumedAt: new Date() },
+    });
+  }
+
+  findRefreshToken(tokenHash: string): Promise<RefreshToken | null> {
+    return this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+  }
+
+  deleteRefreshTokenByHash(tokenHash: string) {
+    return this.prisma.refreshToken.deleteMany({ where: { tokenHash } });
+  }
+
+  updateWorkerProfile(
+    userId: string,
+    data: { name: string; phone: string; skillTags: string[] },
+  ) {
+    return this.prisma.workerProfile.update({
+      where: { userId },
+      data,
+    });
+  }
+
+  updateEmployerProfile(
+    userId: string,
+    data: { businessName: string; phone: string },
+  ) {
+    return this.prisma.employerProfile.update({
+      where: { userId },
+      data,
     });
   }
 }
