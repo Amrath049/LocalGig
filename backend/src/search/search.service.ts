@@ -139,16 +139,12 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
       },
     };
 
-    console.log(JSON.stringify(body, null, 2));
-
     const response = await this.request<{
       hits: { hits: Array<{ _source: IndexedJob }> };
     }>(`/${this.indexName}/_search`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
-
-    console.log(JSON.stringify(response, null, 2));
 
     return response.hits.hits.map((hit) => hit._source);
   }

@@ -532,6 +532,9 @@ function JobsPage({
   onSearchChange,
   jobTypeFilter,
   onJobTypeFilterChange,
+  appliedIds,
+  onApply,
+  userRole,
 }: {
   jobs: Job[];
   isLoading: boolean;
@@ -539,6 +542,9 @@ function JobsPage({
   onSearchChange: (query: string) => void;
   jobTypeFilter?: string;
   onJobTypeFilterChange: (type?: string) => void;
+  appliedIds: Set<string>;
+  onApply: (jobId: string) => void;
+  userRole: string | null;
 }) {
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -668,7 +674,15 @@ function JobsPage({
                 <span className="font-semibold text-[#2C1A0E]">{results.length}</span> {results.length === 1 ? "job" : "jobs"} found
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {results.map((job) => <JobCard key={job.id} job={job} />)}
+                {results.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    showApplyButton={userRole !== "EMPLOYER"}
+                    applied={appliedIds.has(String(job.id))}
+                    onApply={() => onApply(String(job.id))}
+                  />
+                ))}
               </div>
             </>
           ) : (
@@ -741,12 +755,13 @@ interface NavbarProps {
   onJobs: () => void;
   onLogin: () => void;
   onLogout: () => void;
+  onDashboard: () => void;
   userType: "worker" | "employer" | null;
   profile: ApiUserProfile | null;
 }
 
-function Navbar({ view, onHome, onJobs, onLogin, onLogout, userType, profile }: NavbarProps) {
-  const isLoggedIn = view === "worker" || view === "employer";
+function Navbar({ view, onHome, onJobs, onLogin, onLogout, onDashboard, userType, profile }: NavbarProps) {
+  const isLoggedIn = profile !== null;
   const displayName =
     profile?.workerProfile?.name ||
     profile?.employerProfile?.businessName ||
@@ -768,6 +783,16 @@ function Navbar({ view, onHome, onJobs, onLogin, onLogout, userType, profile }: 
           >
             <Briefcase className="w-4 h-4" /> Browse Jobs
           </button>
+          {isLoggedIn && (
+            <button
+              onClick={onDashboard}
+              className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                view === "worker" || view === "employer" ? "text-[#7C4A2D]" : "text-[#8C7B6E] hover:text-[#2C1A0E]"
+              }`}
+            >
+              <User className="w-4 h-4" /> Dashboard
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           {!isLoggedIn ? (
@@ -800,7 +825,23 @@ function Navbar({ view, onHome, onJobs, onLogin, onLogout, userType, profile }: 
 
 // ─── Homepage ─────────────────────────────────────────────────────────────────
 
-function HomePage({ onLogin, onJobs, onSearch, jobs }: { onLogin: () => void; onJobs: () => void; onSearch: (query: string) => void; jobs: Job[] }) {
+function HomePage({
+  onLogin,
+  onJobs,
+  onSearch,
+  jobs,
+  appliedIds,
+  onApply,
+  userRole,
+}: {
+  onLogin: () => void;
+  onJobs: () => void;
+  onSearch: (query: string) => void;
+  jobs: Job[];
+  appliedIds: Set<string>;
+  onApply: (jobId: string) => void;
+  userRole: string | null;
+}) {
   const [filter, setFilter] = useState<JobFilter>("All");
   const [search, setSearch] = useState("");
   const filters: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
@@ -884,7 +925,15 @@ function HomePage({ onLogin, onJobs, onSearch, jobs }: { onLogin: () => void; on
 
         {filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filtered.slice(0, 6).map((job) => <JobCard key={job.id} job={job} />)}
+            {filtered.slice(0, 6).map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                showApplyButton={userRole !== "EMPLOYER"}
+                applied={appliedIds.has(String(job.id))}
+                onApply={() => onApply(String(job.id))}
+              />
+            ))}
           </div>
         ) : (
           <div className="text-center py-24">
@@ -1162,12 +1211,29 @@ function LoginPage({ onSuccess, authError, setAuthError }: { onSuccess: (type: "
 
 // ─── Worker Dashboard ─────────────────────────────────────────────────────────
 
-function WorkerDashboard({ onBrowseJobs, jobs, token, profile }: { onBrowseJobs: () => void; jobs: Job[]; token: string | null; profile: ApiUserProfile | null; }) {
+function WorkerDashboard({
+  onBrowseJobs,
+  jobs,
+  token,
+  profile,
+  appliedIds,
+  onApply,
+  applications,
+  isLoadingApplications,
+  onJobTypeFilterChange,
+}: {
+  onBrowseJobs: () => void;
+  jobs: Job[];
+  token: string | null;
+  profile: ApiUserProfile | null;
+  appliedIds: Set<string>;
+  onApply: (jobId: string) => void;
+  applications: MyApplication[];
+  isLoadingApplications: boolean;
+  onJobTypeFilterChange: (type?: string) => void;
+}) {
   const [tab, setTab] = useState<WorkerTab>("browse");
   const [filter, setFilter] = useState<JobFilter>("All");
-  const [appliedIds, setAppliedIds] = useState<Set<string | number>>(new Set());
-  const [applications, setApplications] = useState<MyApplication[]>([]);
-  const [isLoadingApplications, setIsLoadingApplications] = useState(false);
   const [editing, setEditing] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
@@ -1188,36 +1254,6 @@ function WorkerDashboard({ onBrowseJobs, jobs, token, profile }: { onBrowseJobs:
       setSkills(profile.workerProfile.skillTags ?? []);
     }
   }, [profile]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    async function loadApplications() {
-      setIsLoadingApplications(true);
-      try {
-        const apiApps = await getMyApplications(token);
-        setApplications(apiApps.map(apiApplicationToUiApplication));
-        setAppliedIds(new Set(apiApps.map((app) => String(app.job?.id ?? "")).filter(Boolean)));
-      } catch (error) {
-        console.error("Failed to load applications", error);
-      } finally {
-        setIsLoadingApplications(false);
-      }
-    }
-
-    loadApplications();
-  }, [token]);
-
-  async function handleApply(jobId: string) {
-    if (!token) return;
-    try {
-      const application = await applyJob(token, jobId);
-      setAppliedIds((prev) => new Set(prev).add(jobId));
-      setApplications((prev) => [apiApplicationToUiApplication(application), ...prev]);
-    } catch (error) {
-      console.error("Failed to apply to job", error);
-    }
-  }
 
   async function handleSaveProfile() {
     if (!token) return;
@@ -1308,7 +1344,7 @@ function WorkerDashboard({ onBrowseJobs, jobs, token, profile }: { onBrowseJobs:
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filtered.map((job) => (
-              <JobCard key={job.id} job={job} applied={appliedIds.has(job.id)} onApply={() => handleApply(job.id)} showApplyButton />
+              <JobCard key={job.id} job={job} applied={appliedIds.has(String(job.id))} onApply={() => onApply(String(job.id))} showApplyButton />
             ))}
           </div>
         </>
@@ -1759,6 +1795,9 @@ export default function App() {
   const [jobSearchQuery, setJobSearchQuery] = useState("");
   const [jobTypeFilter, setJobTypeFilter] = useState<string | undefined>(undefined);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [applications, setApplications] = useState<MyApplication[]>([]);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [isLoadingApplications, setIsLoadingApplications] = useState(false);
 
   useEffect(() => {
     async function loadJobs() {
@@ -1793,6 +1832,50 @@ export default function App() {
     loadProfile();
   }, [token]);
 
+  useEffect(() => {
+    async function loadApplications() {
+      if (!token || !profile || profile.role !== "WORKER") {
+        setApplications([]);
+        setAppliedIds(new Set());
+        return;
+      }
+      setIsLoadingApplications(true);
+      try {
+        const apiApps = await getMyApplications(token);
+        setApplications(apiApps.map(apiApplicationToUiApplication));
+        setAppliedIds(new Set(apiApps.map((app) => String(app.job?.id ?? "")).filter(Boolean)));
+      } catch (error) {
+        console.error("Failed to load applications", error);
+      } finally {
+        setIsLoadingApplications(false);
+      }
+    }
+    loadApplications();
+  }, [token, profile]);
+
+  async function handleApply(jobId: string) {
+    if (!token) {
+      setView("login");
+      return;
+    }
+    if (profile?.role !== "WORKER") {
+      alert("Only worker accounts can apply for jobs.");
+      return;
+    }
+    try {
+      const application = await applyJob(token, jobId);
+      setAppliedIds((prev) => {
+        const next = new Set(prev);
+        next.add(jobId);
+        return next;
+      });
+      setApplications((prev) => [apiApplicationToUiApplication(application), ...prev]);
+    } catch (error: any) {
+      console.error("Failed to apply to job", error);
+      alert(error?.message || "Failed to apply to job");
+    }
+  }
+
   async function handleLoginSuccess(type: "worker" | "employer", accessToken: string) {
     setToken(accessToken);
     localStorage.setItem("localgig_token", accessToken);
@@ -1825,13 +1908,14 @@ export default function App() {
           onJobs={() => setView("jobs")}
           onLogin={() => setView("login")}
           onLogout={handleLogout}
+          onDashboard={() => setView(userType === "worker" ? "worker" : "employer")}
           userType={userType}
           profile={profile}
         />
-        {view === "home"     && <HomePage onLogin={() => setView("login")} onJobs={() => setView("jobs")} onSearch={handleJobSearchChange} jobs={jobs} />}
-        {view === "jobs"     && <JobsPage jobs={jobs} search={jobSearchQuery} onSearchChange={handleJobSearchChange} jobTypeFilter={jobTypeFilter} onJobTypeFilterChange={handleJobTypeFilterChange} skills={getUniqueSkills(jobs)} isLoading={isLoadingJobs} />}
+        {view === "home"     && <HomePage onLogin={() => setView("login")} onJobs={() => setView("jobs")} onSearch={handleJobSearchChange} jobs={jobs} appliedIds={appliedIds} onApply={handleApply} userRole={profile?.role ?? null} />}
+        {view === "jobs"     && <JobsPage jobs={jobs} search={jobSearchQuery} onSearchChange={handleJobSearchChange} jobTypeFilter={jobTypeFilter} onJobTypeFilterChange={handleJobTypeFilterChange} skills={getUniqueSkills(jobs)} isLoading={isLoadingJobs} appliedIds={appliedIds} onApply={handleApply} userRole={profile?.role ?? null} />}
         {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} />}
-        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => setView("jobs")} jobs={jobs} token={token} profile={profile} />}
+        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => setView("jobs")} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} />}
         {view === "employer" && <EmployerDashboard token={token} profile={profile} />}
       </div>
     </div>
