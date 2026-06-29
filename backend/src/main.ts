@@ -16,9 +16,23 @@ async function bootstrap() {
     }),
   );
 
-  // Allow the Next.js frontend (dev: localhost:3000) to call the API.
   app.enableCors({
-    origin: config.get<string>('FRONTEND_URL'),
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      if (!origin) return callback(null, true);
+      const configured = config.get<string>('FRONTEND_URL');
+      if (!configured) {
+        const devOrigins = ['http://localhost:5173', 'http://localhost:3000'];
+        return callback(null, devOrigins.includes(origin));
+      }
+      const allowedOrigins = configured
+        .split(',')
+        .map((url) => url.trim().replace(/\/$/, ''));
+      const isAllowed = allowedOrigins.includes(origin);
+      callback(null, isAllowed);
+    },
     credentials: true,
   });
 
