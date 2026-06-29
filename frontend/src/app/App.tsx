@@ -882,6 +882,7 @@ function HomePage({
   appliedIds,
   onApply,
   userRole,
+  totalJobs,
 }: {
   onLogin: (mode: "login" | "register", role: "worker" | "employer") => void;
   onJobs: () => void;
@@ -890,6 +891,7 @@ function HomePage({
   appliedIds: Set<string>;
   onApply: (jobId: string) => void;
   userRole: string | null;
+  totalJobs: number;
 }) {
   const [filter, setFilter] = useState<JobFilter>("All");
   const [search, setSearch] = useState("");
@@ -991,10 +993,10 @@ function HomePage({
           </div>
         )}
 
-        {filtered.length > 6 && (
+        {totalJobs > 6 && (
           <div className="text-center mt-8">
             <button onClick={onJobs} className="inline-flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] text-[#7C4A2D] font-medium text-sm px-6 py-3 rounded-full hover:bg-[#F0EBE3] hover:border-[#7C4A2D] transition-all shadow-sm">
-              Browse all {jobs.length} jobs <ArrowRight className="w-4 h-4" />
+              Browse all {totalJobs} jobs <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         )}
@@ -1305,6 +1307,7 @@ function WorkerDashboard({
   applications,
   isLoadingApplications,
   onJobTypeFilterChange,
+  totalJobs,
 }: {
   onBrowseJobs: () => void;
   jobs: Job[];
@@ -1315,6 +1318,7 @@ function WorkerDashboard({
   applications: MyApplication[];
   isLoadingApplications: boolean;
   onJobTypeFilterChange: (type?: string) => void;
+  totalJobs: number;
 }) {
   const [tab, setTab] = useState<WorkerTab>("browse");
   const [filter, setFilter] = useState<JobFilter>("All");
@@ -1336,7 +1340,9 @@ function WorkerDashboard({
           {greeting}, {firstName}.{" "}
           <em className="font-normal">{"Here's what's available today."}</em>
         </h1>
-        <p className="text-[#8C7B6E] mt-1.5">{filtered.length} jobs open in {CITY}</p>
+        <p className="text-[#8C7B6E] mt-1.5">
+          {filter === "All" ? totalJobs : filtered.length} jobs open in {CITY}
+        </p>
       </div>
 
       <div className="flex gap-1 bg-[#F0EBE3] rounded-xl p-1 mb-8 w-fit overflow-x-auto">
@@ -2165,6 +2171,7 @@ export default function App() {
             appliedIds={appliedIds}
             onApply={handleApply}
             userRole={profile?.role ?? null}
+            totalJobs={totalJobs}
           />
         )}
         {view === "jobs"     && (
@@ -2187,7 +2194,7 @@ export default function App() {
           />
         )}
         {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} initialMode={loginMode} initialRole={loginRole} />}
-        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => { setAuthError(null); setView("jobs"); }} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} />}
+        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => { setAuthError(null); setView("jobs"); }} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} totalJobs={totalJobs} />}
         {view === "employer" && <EmployerDashboard token={token} profile={profile} />}
         {view === "profile"  && (
           <ProfilePage
