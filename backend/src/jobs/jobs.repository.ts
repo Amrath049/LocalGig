@@ -11,12 +11,14 @@ export class JobsRepository {
     return this.prisma.job.create({ data });
   }
 
-  listOpenJobs(filters?: {
+  async listOpenJobs(filters?: {
     type?: string;
     search?: string;
     posted?: string;
     skills?: string;
     sort?: string;
+    limit?: number;
+    page?: number;
   }) {
     const where: Prisma.JobWhereInput = {
       status: JobStatus.OPEN,
@@ -47,12 +49,28 @@ export class JobsRepository {
     }
 
     const orderDirection = filters?.sort === 'oldest' ? 'asc' : 'desc';
+    const limit = filters?.limit ?? 10;
+    const page = filters?.page ?? 1;
+    const skip = (page - 1) * limit;
 
-    return this.prisma.job.findMany({
-      where,
-      orderBy: { createdAt: orderDirection },
-      include: { employer: true },
-    });
+    const [total, jobs] = await Promise.all([
+      this.prisma.job.count({ where }),
+      this.prisma.job.findMany({
+        where,
+        orderBy: { createdAt: orderDirection },
+        include: { employer: true },
+        take: limit,
+        skip,
+      }),
+    ]);
+
+    return {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      jobs,
+    };
   }
 
   findJobById(id: string) {

@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, useRef, FormEvent } from "react";
 import {
   Search,
   MapPin,
@@ -16,6 +16,8 @@ import {
   SlidersHorizontal,
   Briefcase,
   ChevronDown,
+  Menu,
+  Settings,
 } from "lucide-react";
 import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
@@ -497,6 +499,10 @@ function JobsPage({
   appliedIds,
   onApply,
   userRole,
+  hasMore,
+  onLoadMore,
+  isFetchingMore,
+  totalJobs,
 }: {
   jobs: Job[];
   isLoading: boolean;
@@ -509,8 +515,37 @@ function JobsPage({
   appliedIds: Set<string>;
   onApply: (jobId: string) => void;
   userRole: string | null;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  isFetchingMore: boolean;
+  totalJobs: number;
 }) {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const observerTargetRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!hasMore || isLoading || isFetchingMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const target = observerTargetRef.current;
+    if (target) {
+      observer.observe(target);
+    }
+
+    return () => {
+      if (target) {
+        observer.unobserve(target);
+      }
+    };
+  }, [hasMore, isLoading, isFetchingMore, onLoadMore]);
 
   const results = jobs;
 
@@ -526,7 +561,7 @@ function JobsPage({
         <h1 className="font-['Fraunces'] text-3xl sm:text-4xl font-bold text-[#7C4A2D]">
           Jobs in <em className="font-normal">{CITY}</em>
         </h1>
-        <p className="text-[#8C7B6E] mt-1 text-sm">{isLoading ? 'Loading jobs…' : `${jobs.length} live listings — updated daily`}</p>
+        <p className="text-[#8C7B6E] mt-1 text-sm">{isLoading ? 'Loading jobs…' : `${totalJobs} live listings — updated daily`}</p>
       </div>
 
       {/* Search + sort bar */}
@@ -611,7 +646,7 @@ function JobsPage({
               filters={filters}
               onChange={onFiltersChange}
               onReset={onResetFilters}
-              resultCount={results.length}
+              resultCount={totalJobs}
               skills={skills}
             />
           </div>
@@ -622,7 +657,7 @@ function JobsPage({
           {results.length > 0 ? (
             <>
               <p className="text-sm text-[#8C7B6E] mb-4 lg:hidden">
-                <span className="font-semibold text-[#2C1A0E]">{results.length}</span> {results.length === 1 ? "job" : "jobs"} found
+                <span className="font-semibold text-[#2C1A0E]">{totalJobs}</span> {totalJobs === 1 ? "job" : "jobs"} found
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {results.map((job) => (
@@ -635,6 +670,19 @@ function JobsPage({
                   />
                 ))}
               </div>
+              {/* Intersection Observer target for scroll loading */}
+              {hasMore && (
+                <div ref={observerTargetRef} className="h-16 flex items-center justify-center mt-6">
+                  {isFetchingMore ? (
+                    <div className="flex items-center gap-2 text-sm text-[#8C7B6E] animate-pulse">
+                      <span className="w-2 h-2 bg-[#E07B39] rounded-full animate-bounce" />
+                      <span className="w-2 h-2 bg-[#E07B39] rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <span className="w-2 h-2 bg-[#E07B39] rounded-full animate-bounce [animation-delay:0.4s]" />
+                      <span>Loading more jobs...</span>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </>
           ) : (
             <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -712,6 +760,7 @@ interface NavbarProps {
 }
 
 function Navbar({ view, onHome, onJobs, onLogin, onDashboard, onProfileClick, userType, profile }: NavbarProps) {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isLoggedIn = profile !== null;
   const displayName =
     profile?.workerProfile?.name ||
@@ -762,7 +811,7 @@ function Navbar({ view, onHome, onJobs, onLogin, onDashboard, onProfileClick, us
           ) : (
             <button
               onClick={onProfileClick}
-              className={`text-sm font-medium hover:text-[#7C4A2D] transition-colors px-3 py-2 flex items-center gap-1.5 ${
+              className={`hidden sm:flex text-sm font-medium hover:text-[#7C4A2D] transition-colors px-3 py-2 items-center gap-1.5 ${
                 view === "profile" ? "text-[#7C4A2D] underline underline-offset-4 font-semibold" : "text-[#8C7B6E]"
               }`}
             >
@@ -770,8 +819,55 @@ function Navbar({ view, onHome, onJobs, onLogin, onDashboard, onProfileClick, us
               {displayName}
             </button>
           )}
+
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="sm:hidden text-[#8C7B6E] hover:text-[#2C1A0E] p-2 focus:outline-none"
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
         </div>
       </div>
+      {mobileMenuOpen && (
+        <div className="sm:hidden border-t border-[#E8DDD4] bg-[#FAF7F2] px-4 py-3 flex flex-col gap-2.5 shadow-md">
+          <button
+            onClick={() => { onJobs(); setMobileMenuOpen(false); }}
+            className={`flex items-center gap-2 text-sm font-medium py-2 ${
+              view === "jobs" ? "text-[#7C4A2D]" : "text-[#8C7B6E]"
+            }`}
+          >
+            <Briefcase className="w-4.5 h-4.5" /> Browse Jobs
+          </button>
+          {isLoggedIn ? (
+            <>
+              <button
+                onClick={() => { onDashboard(); setMobileMenuOpen(false); }}
+                className={`flex items-center gap-2 text-sm font-medium py-2 ${
+                  view === "worker" || view === "employer" ? "text-[#7C4A2D]" : "text-[#8C7B6E]"
+                }`}
+              >
+                <User className="w-4.5 h-4.5" /> Dashboard
+              </button>
+              <button
+                onClick={() => { onProfileClick(); setMobileMenuOpen(false); }}
+                className={`flex items-center gap-2 text-sm font-medium py-2 ${
+                  view === "profile" ? "text-[#7C4A2D]" : "text-[#8C7B6E]"
+                }`}
+              >
+                <Settings className="w-4.5 h-4.5" /> Profile ({displayName})
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => { onLogin("login", "worker"); setMobileMenuOpen(false); }}
+              className="flex items-center gap-2 text-sm font-medium py-2 text-[#8C7B6E]"
+            >
+              <User className="w-4.5 h-4.5" /> Log in
+            </button>
+          )}
+        </div>
+      )}
     </nav>
   );
 }
@@ -1860,9 +1956,26 @@ export default function App() {
   const [loginMode, setLoginMode] = useState<"login" | "register">("login");
   const [loginRole, setLoginRole] = useState<"worker" | "employer">("worker");
 
+  // Pagination states
+  const [jobsPage, setJobsPage] = useState<number>(1);
+  const [hasMoreJobs, setHasMoreJobs] = useState<boolean>(true);
+  const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
+  const [totalJobs, setTotalJobs] = useState<number>(0);
+
   useEffect(() => {
+    // Reset page and list when filters or search change
+    setJobsPage(1);
+    setHasMoreJobs(true);
+  }, [jobsFilters, jobSearchQuery]);
+
+  useEffect(() => {
+    let active = true;
     async function loadJobs() {
-      setIsLoadingJobs(true);
+      if (jobsPage === 1) {
+        setIsLoadingJobs(true);
+      } else {
+        setIsFetchingMore(true);
+      }
       try {
         const typeParam = jobsFilters.jobType === "All" ? undefined : (
           jobsFilters.jobType === "Full-time" ? "FULL_TIME" :
@@ -1873,28 +1986,52 @@ export default function App() {
         const skillsParam = jobsFilters.skills.length > 0 ? jobsFilters.skills.join(",") : undefined;
         const sortParam = jobsFilters.sort;
 
-        const apiJobs = await getJobs(
+        const response = await getJobs(
           jobSearchQuery,
           typeParam,
           postedParam,
           skillsParam,
           sortParam,
+          jobsPage,
+          10, // limit
         );
-        setJobs(apiJobs.map(apiJobToUiJob));
+
+        if (!active) return;
+
+        setTotalJobs(response.total);
+
+        const mapped = response.jobs.map(apiJobToUiJob);
+        if (jobsPage === 1) {
+          setJobs(mapped);
+        } else {
+          setJobs((prev) => [...prev, ...mapped]);
+        }
+
+        if (response.jobs.length < 10) {
+          setHasMoreJobs(false);
+        } else {
+          setHasMoreJobs(true);
+        }
       } catch (error) {
         console.error("Failed to load jobs", error);
       } finally {
-        setIsLoadingJobs(false);
+        if (active) {
+          setIsLoadingJobs(false);
+          setIsFetchingMore(false);
+        }
       }
     }
     loadJobs();
-  }, [jobsFilters, jobSearchQuery]);
+    return () => {
+      active = false;
+    };
+  }, [jobsFilters, jobSearchQuery, jobsPage]);
 
   useEffect(() => {
     async function loadInitialSkills() {
       try {
-        const apiJobs = await getJobs();
-        setAllSkills(getUniqueSkills(apiJobs.map(apiJobToUiJob)));
+        const response = await getJobs();
+        setAllSkills(getUniqueSkills(response.jobs.map(apiJobToUiJob)));
       } catch (error) {
         console.error("Failed to load initial skills", error);
       }
@@ -2043,6 +2180,10 @@ export default function App() {
             appliedIds={appliedIds}
             onApply={handleApply}
             userRole={profile?.role ?? null}
+            hasMore={hasMoreJobs}
+            onLoadMore={() => setJobsPage((prev) => prev + 1)}
+            isFetchingMore={isFetchingMore}
+            totalJobs={totalJobs}
           />
         )}
         {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} initialMode={loginMode} initialRole={loginRole} />}

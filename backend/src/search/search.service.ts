@@ -79,6 +79,8 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     posted?: string;
     skills?: string;
     sort?: string;
+    limit?: number;
+    page?: number;
   }) {
     const filter: Array<Record<string, unknown>> = [
       { term: { status: JobStatus.OPEN } },
@@ -104,7 +106,10 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (filters.skills) {
-      const skillsList = filters.skills.split(',').map((s) => s.trim()).filter(Boolean);
+      const skillsList = filters.skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       if (skillsList.length > 0) {
         filter.push({
           terms: {
@@ -151,9 +156,13 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     }
 
     const sortOrder = filters.sort === 'oldest' ? 'asc' : 'desc';
+    const limit = filters.limit ?? 10;
+    const page = filters.page ?? 1;
+    const from = (page - 1) * limit;
 
     const body: Record<string, unknown> = {
-      size: 50,
+      size: limit,
+      from,
       sort: [{ createdAt: { order: sortOrder } }],
       query: {
         bool: {
@@ -166,13 +175,27 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     };
 
     const response = await this.request<{
-      hits: { hits: Array<{ _source: IndexedJob }> };
+      hits: {
+        total: { value: number } | number;
+        hits: Array<{ _source: IndexedJob }>;
+      };
     }>(`/${this.indexName}/_search`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
 
-    return response.hits.hits.map((hit) => hit._source);
+    const total =
+      typeof response.hits.total === 'object'
+        ? (response.hits.total as any).value
+        : (response.hits.total as number) || 0;
+
+    return {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      jobs: response.hits.hits.map((hit) => hit._source),
+    };
   }
 
   private async processQueue() {

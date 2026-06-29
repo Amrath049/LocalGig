@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Param,
   Patch,
   Post,
@@ -17,6 +18,8 @@ import { CurrentUser } from '../common/decorators/user.decorator';
 
 @Controller('jobs')
 export class JobsController {
+  private readonly logger = new Logger(JobsController.name);
+
   constructor(private readonly jobsService: JobsService) {}
 
   @Get()
@@ -26,14 +29,26 @@ export class JobsController {
     @Query('posted') posted?: string,
     @Query('skills') skills?: string,
     @Query('sort') sort?: string,
+    @Query('limit') limit?: string,
+    @Query('page') page?: string,
   ) {
-    return this.jobsService.listJobs({ type, search, posted, skills, sort });
+    this.logger.log(`List job api called:${search}`);
+    return this.jobsService.listJobs({
+      type,
+      search,
+      posted,
+      skills,
+      sort,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+    });
   }
 
   @Get('mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EMPLOYER')
   myJobs(@CurrentUser() user: any) {
+    this.logger.log('Get my jobs called');
     return this.jobsService.listMyJobs(user.id);
   }
 
@@ -41,13 +56,23 @@ export class JobsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EMPLOYER')
   create(@CurrentUser() user: any, @Body() dto: CreateJobDto) {
+    this.logger.log('Create job called');
     return this.jobsService.createJob(user.id, dto);
+  }
+
+  @Post('bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EMPLOYER')
+  createBulk(@CurrentUser() user: any, @Body() dtos: CreateJobDto[]) {
+    this.logger.log('Create bulk job called');
+    return this.jobsService.createBulkJobs(user.id, dtos);
   }
 
   @Patch(':id/close')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('EMPLOYER')
   close(@CurrentUser() user: any, @Param('id') id: string) {
+    this.logger.log('Close job called');
     return this.jobsService.closeJob(id, user.id);
   }
 }

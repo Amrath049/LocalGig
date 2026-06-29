@@ -132,12 +132,22 @@ export async function getMe(token: string) {
   });
 }
 
+export type GetJobsResponse = {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  jobs: ApiJob[];
+};
+
 export async function getJobs(
   search?: string,
   type?: string,
   posted?: string,
   skills?: string,
   sort?: string,
+  page?: number,
+  limit?: number,
 ) {
   const query = new URLSearchParams();
   if (search) query.set("search", search);
@@ -145,8 +155,10 @@ export async function getJobs(
   if (posted) query.set("posted", posted);
   if (skills) query.set("skills", skills);
   if (sort) query.set("sort", sort);
+  if (page !== undefined) query.set("page", String(page));
+  if (limit !== undefined) query.set("limit", String(limit));
   const queryString = query.toString();
-  return apiFetch<ApiJob[]>(`/jobs${queryString ? `?${queryString}` : ""}`);
+  return apiFetch<GetJobsResponse>(`/jobs${queryString ? `?${queryString}` : ""}`);
 }
 
 export async function getMyApplications(token: string) {

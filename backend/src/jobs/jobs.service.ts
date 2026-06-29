@@ -41,19 +41,56 @@ export class JobsService {
     return job;
   }
 
+  async createBulkJobs(userId: string, dtos: CreateJobDto[]) {
+    if (!Array.isArray(dtos)) {
+      throw new BadRequestException('Payload must be an array of jobs');
+    }
+
+    const createdJobs = [];
+    for (const dto of dtos) {
+      if (!dto.title || !dto.description || !dto.type) {
+        throw new BadRequestException(
+          'Missing required fields on one or more jobs',
+        );
+      }
+
+      const job = await this.jobsRepository.createJob({
+        title: dto.title,
+        description: dto.description,
+        type: dto.type as JobType,
+        location: dto.location ?? null,
+        payType: dto.payType as PayType,
+        payAmount: dto.payAmount ?? null,
+        payMin: dto.payMin ?? null,
+        payMax: dto.payMax ?? null,
+        payCustom: dto.payCustom ?? null,
+        employer: { connect: { id: userId } },
+      });
+
+      await this.enqueueSearchUpdate(job.id);
+      createdJobs.push(job);
+    }
+
+    return { count: createdJobs.length, jobs: createdJobs };
+  }
+
   async listJobs(filters: {
     type?: string;
     search?: string;
     posted?: string;
     skills?: string;
     sort?: string;
+    limit?: number;
+    page?: number;
   }) {
     if (
       filters.search ||
       filters.type ||
       filters.posted ||
       filters.skills ||
-      filters.sort
+      filters.sort ||
+      filters.limit ||
+      filters.page
     ) {
       try {
         return await this.searchService.searchJobs(filters);

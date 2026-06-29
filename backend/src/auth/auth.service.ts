@@ -63,6 +63,7 @@ export class AuthService {
       codeHash: this.hashToken(otp),
       expiresAt: new Date(Date.now() + this.emailOtpTTL),
     });
+    console.log(`Registration OTP: ${otp}, for user: ${dto.email}`);
     await this.mailService.sendVerificationOtpEmail(
       user.email,
       otp,
