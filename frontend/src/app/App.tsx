@@ -19,6 +19,16 @@ import {
   Menu,
   Settings,
   Trash2,
+  Wrench,
+  UtensilsCrossed,
+  Bike,
+  Shield,
+  ShoppingBag,
+  Hammer,
+  Zap,
+  Scissors,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
@@ -878,7 +888,114 @@ function Navbar({ view, onHome, onJobs, onLogin, onDashboard, onProfileClick, us
   );
 }
 
+// ─── Pinned Hero Card ──────────────────────────────────────────────────────────
+
+function PinnedHeroCard({
+  job,
+  rotate,
+  zIndex,
+  top,
+  left,
+}: {
+  job: Job;
+  rotate: string;
+  zIndex: number;
+  top: string;
+  left: string;
+}) {
+  return (
+    <div
+      className="absolute bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-4 w-56 shadow-[0_4px_20px_rgba(44,26,14,0.14)] text-left"
+      style={{
+        transform: `rotate(${rotate})`,
+        zIndex,
+        top,
+        left,
+      }}
+    >
+      {/* Thumbtack */}
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-[#E07B39] border-2 border-[#FAF7F2] shadow-md flex items-center justify-center">
+        <div className="w-2 h-2 rounded-full bg-[#FFFDF9]/60" />
+      </div>
+      <h4 className="font-['Fraunces'] font-bold text-[15px] text-[#7C4A2D] leading-snug mt-1 mb-1.5 truncate">
+        {job.title}
+      </h4>
+      <div className="flex items-center gap-1 mb-3">
+        <span className="text-xs text-[#8C7B6E] truncate">
+          {job.employer}
+        </span>
+        {job.verified && (
+          <CheckCircle className="w-3 h-3 text-[#6A9E78] flex-shrink-0" />
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1 mb-3">
+        <TypeTag label={job.type} />
+      </div>
+      <p className="text-sm font-semibold text-[#2C1A0E]">
+        {job.pay}
+      </p>
+      <p className="text-[10px] text-[#8C7B6E] flex items-center gap-0.5 mt-1">
+        <MapPin className="w-2.5 h-2.5" /> {job.location}
+      </p>
+    </div>
+  );
+}
+
 // ─── Homepage ─────────────────────────────────────────────────────────────────
+
+const CATEGORIES = [
+  { icon: Wrench, label: "Plumbing & Repairs", query: "plumbing" },
+  { icon: UtensilsCrossed, label: "Food & Kitchen", query: "cook" },
+  { icon: Bike, label: "Delivery & Logistics", query: "delivery" },
+  { icon: Shield, label: "Security", query: "security" },
+  { icon: ShoppingBag, label: "Retail & Sales", query: "sales" },
+  { icon: Hammer, label: "Construction & Labour", query: "labour" },
+  { icon: Zap, label: "Electricals", query: "electrician" },
+  { icon: Scissors, label: "Tailoring & Craft", query: "tailor" },
+];
+
+const HOW_IT_WORKS = {
+  worker: [
+    {
+      icon: User,
+      step: "01",
+      title: "Create your free profile",
+      body: "Add your name, phone number, and the skills you bring.",
+    },
+    {
+      icon: MapPin,
+      step: "02",
+      title: "Browse jobs near you",
+      body: "Filter by job type, pay, and area. No account needed to look.",
+    },
+    {
+      icon: Check,
+      step: "03",
+      title: "Apply in one tap",
+      body: "Hit Apply Now. The employer sees your profile and calls you directly.",
+    },
+  ],
+  employer: [
+    {
+      icon: Plus,
+      step: "01",
+      title: "Post what you need",
+      body: "Tell us what kind of help you need, in plain language.",
+    },
+    {
+      icon: Users,
+      step: "02",
+      title: "See who applies",
+      body: "Review applicants, mark them seen, shortlist the right ones.",
+    },
+    {
+      icon: Phone,
+      step: "03",
+      title: "Connect directly",
+      body: "Call or WhatsApp the worker. No middlemen, no platform fees.",
+    },
+  ],
+};
 
 function HomePage({
   onLogin,
@@ -899,129 +1016,469 @@ function HomePage({
   userRole: string | null;
   totalJobs: number;
 }) {
-  const [filter, setFilter] = useState<JobFilter>("All");
   const [search, setSearch] = useState("");
-  const filters: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
+  const [howWorksTab, setHowWorksTab] = useState<"worker" | "employer">("worker");
 
-  const filtered = jobs.filter((j) => {
-    const matchType = filter === "All" || j.type === filter;
-    return matchType;
-  });
+  const heroCards = jobs.slice(0, 3);
+
+
+  const handleSearch = () => {
+    onSearch(search.trim());
+    onJobs();
+  };
 
   return (
-    <main>
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-[#E8DDD4]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 bg-[#A3B899]/25 text-[#3D6858] text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full mb-6">
-              <MapPin className="w-3.5 h-3.5" /> {CITY} &amp; surrounding areas
-            </div>
-            <h1 className="font-['Fraunces'] text-4xl sm:text-5xl lg:text-[56px] font-bold text-[#7C4A2D] leading-[1.1] mb-5">
-              Work is waiting.<br />
-              <em className="font-normal">Right here in {CITY}.</em>
-            </h1>
-            <p className="text-[#8C7B6E] text-lg leading-relaxed mb-8 max-w-[420px]">
-              Find honest work close to home. Connect with local businesses that need you — no middlemen, no nonsense.
-            </p>
-            <div className="flex gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-2 shadow-[0_2px_12px_rgba(44,26,14,0.08)] max-w-md">
-              <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
-                <Search className="w-4 h-4 text-[#8C7B6E] flex-shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search jobs, skills, employers…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="flex-1 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none min-w-0"
-                />
-                {search && (
-                  <button onClick={() => setSearch("")} className="text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors flex-shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+    <>
+      <style>{`
+        @keyframes ticker-scroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .ticker-track {
+          display: flex;
+          width: max-content;
+          animation: ticker-scroll 38s linear infinite;
+        }
+        .ticker-wrap:hover .ticker-track { animation-play-state: paused; }
+      `}</style>
+
+      <main>
+        {/* ── HERO ─────────────────────────────────────────────────────── */}
+        <section className="relative overflow-hidden border-b border-[#E8DDD4] bg-[#FAF7F2]">
+          {/* Decorative dot grid */}
+          <div
+            className="absolute inset-0 opacity-[0.04]"
+            aria-hidden="true"
+            style={{
+              backgroundImage: "radial-gradient(#7C4A2D 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          />
+
+          <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-10 items-center">
+            {/* Left */}
+            <div>
+              <div className="inline-flex items-center gap-2 bg-[#A3B899]/25 text-[#3D6858] text-xs font-medium uppercase tracking-widest px-3 py-1.5 rounded-full mb-5">
+                <MapPin className="w-3.5 h-3.5" /> {CITY} &amp; surrounding areas
               </div>
-              <button className="bg-[#E07B39] text-[#FFFDF9] px-4 sm:px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-[#CA6A28] transition-colors flex-shrink-0" onClick={() => {
-                onSearch(search.trim());
-                onJobs();
-              }}>
-                Search
+
+              <h1
+                className="font-['Fraunces'] font-bold text-[#7C4A2D] leading-[1.08] mb-5"
+                style={{
+                  fontSize: "clamp(2.4rem, 5vw, 3.8rem)",
+                }}
+              >
+                Work is waiting.
+                <br />
+                <em className="font-normal text-[#E07B39]">
+                  Right here in {CITY}.
+                </em>
+              </h1>
+
+              <p className="text-[#8C7B6E] text-lg leading-relaxed mb-7 max-w-[440px]">
+                Honest work, close to home. No suits, no corporate nonsense — just real jobs from real {CITY} businesses.
+              </p>
+
+              {/* Search */}
+              <div className="flex gap-2 bg-[#FFFDF9] border-2 border-[#E8DDD4] rounded-2xl p-2 shadow-[0_4px_20px_rgba(44,26,14,0.1)] max-w-lg focus-within:border-[#7C4A2D] transition-colors">
+                <div className="flex-1 flex items-center gap-2 px-3 min-w-0">
+                  <Search className="w-4 h-4 text-[#8C7B6E] flex-shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Plumber, Cook, Security Guard…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    className="flex-1 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none min-w-0"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch("")}
+                      className="text-[#8C7B6E] hover:text-[#2C1A0E]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={handleSearch}
+                  className="bg-[#E07B39] text-[#FFFDF9] px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#CA6A28] transition-colors flex-shrink-0"
+                >
+                  Search
+                </button>
+              </div>
+
+              {/* Popular searches */}
+              <div className="flex items-center gap-2 mt-4 flex-wrap">
+                <span className="text-xs text-[#8C7B6E]">Popular:</span>
+                {["Cook", "Plumber", "Delivery Rider", "Security Guard", "Painter"].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      onSearch(s);
+                      onJobs();
+                    }}
+                    className="text-xs font-medium text-[#7C4A2D] bg-[#F0EBE3] hover:bg-[#E8DDD4] px-3 py-1.5 rounded-full transition-colors border border-[#E8DDD4]"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {/* Mini stats */}
+              <div className="flex items-center gap-6 mt-8 pt-6 border-t border-[#E8DDD4]">
+                {[
+                  { value: `${totalJobs}+`, label: "Live jobs" },
+                  { value: "Free", label: "Always free to apply" },
+                ].map(({ value, label }) => (
+                  <div key={label}>
+                    <p className="font-['Fraunces'] font-bold text-xl text-[#7C4A2D]">{value}</p>
+                    <p className="text-xs text-[#8C7B6E] mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right — pinned job slips */}
+            <div className="hidden lg:block relative h-[340px]">
+              {heroCards[0] && (
+                <PinnedHeroCard
+                  job={heroCards[0]}
+                  rotate="-4deg"
+                  zIndex={1}
+                  top="10px"
+                  left="10px"
+                />
+              )}
+              {heroCards[1] && (
+                <PinnedHeroCard
+                  job={heroCards[1]}
+                  rotate="2.5deg"
+                  zIndex={2}
+                  top="50px"
+                  left="70px"
+                />
+              )}
+              {heroCards[2] && (
+                <PinnedHeroCard
+                  job={heroCards[2]}
+                  rotate="-1deg"
+                  zIndex={3}
+                  top="110px"
+                  left="140px"
+                />
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── JOB CATEGORIES ───────────────────────────────────────────── */}
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+          <div className="flex items-end justify-between mb-8 flex-wrap gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-widest text-[#8C7B6E] mb-2">
+                What are you looking for?
+              </p>
+              <h2 className="font-['Fraunces'] text-2xl sm:text-3xl font-bold text-[#7C4A2D]">
+                Browse by trade
+              </h2>
+            </div>
+            <button
+              onClick={onJobs}
+              className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1"
+            >
+              See all jobs <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {CATEGORIES.map(({ icon: Icon, label, query }) => {
+              return (
+                <button
+                  key={label}
+                  onClick={() => {
+                    onSearch(query);
+                    onJobs();
+                  }}
+                  className="group flex flex-col items-start gap-3 p-4 sm:p-5 rounded-2xl border text-left bg-[#FFFDF9] border-[#E8DDD4] hover:border-[#7C4A2D] hover:shadow-[0_4px_16px_rgba(44,26,14,0.1)] hover:-translate-y-0.5 transition-all duration-200"
+                >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-[#F0EBE3] group-hover:bg-[#E8DDD4] transition-colors">
+                    <Icon className="w-5 h-5 text-[#7C4A2D]" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold leading-snug text-[#2C1A0E]">
+                      {label}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ── FRESH OFF THE BOARD ──────────────────────────────────────── */}
+        <section className="border-t border-[#E8DDD4] bg-[#FFFDF9] py-12 sm:py-16">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="flex items-end justify-between mb-8 flex-wrap gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-widest text-[#8C7B6E] mb-2">
+                  Posted recently
+                </p>
+                <h2 className="font-['Fraunces'] text-2xl sm:text-3xl font-bold text-[#7C4A2D]">
+                  Fresh off the board
+                </h2>
+              </div>
+              <button
+                onClick={onJobs}
+                className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1"
+              >
+                Browse all {totalJobs} jobs <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {jobs.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {jobs.slice(0, 6).map((job, i) => {
+                  const rotations = ["-0.8deg", "0.6deg", "-0.4deg", "0.9deg", "-0.6deg", "0.4deg"];
+                  const applied = appliedIds.has(String(job.id));
+                  return (
+                    <div
+                      key={job.id}
+                      className="bg-[#FAF7F2] border border-[#E8DDD4] rounded-2xl p-5 flex flex-col gap-4 shadow-[0_2px_12px_rgba(44,26,14,0.07)] hover:shadow-[0_6px_24px_rgba(44,26,14,0.13)] hover:-translate-y-1 transition-all duration-200 relative text-left"
+                      style={{
+                        transform: `rotate(${rotations[i % rotations.length]})`,
+                      }}
+                    >
+                      {/* Pin */}
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-[#A3B899] border-2 border-[#FAF7F2] shadow flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-[#FFFDF9]/60" />
+                      </div>
+                      <div>
+                        <h3 className="font-['Fraunces'] font-bold text-[16px] text-[#7C4A2D] leading-snug truncate">
+                          {job.title}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-sm text-[#8C7B6E] truncate">
+                            {job.employer}
+                          </span>
+                          {job.verified && (
+                            <CheckCircle className="w-3.5 h-3.5 text-[#6A9E78]" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <TypeTag label={job.type} />
+                        {job.skills.slice(0, 2).map((s) => (
+                          <SkillTag key={s} label={s} />
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between mt-auto pt-3 border-t border-[#E8DDD4]/60">
+                        <div className="min-w-0 pr-2">
+                          <p className="font-semibold text-[#2C1A0E] text-sm truncate">
+                            {job.pay}
+                          </p>
+                          <p className="text-[10px] text-[#8C7B6E] flex items-center gap-0.5 mt-0.5 truncate">
+                            <MapPin className="w-2.5 h-2.5" /> {job.location}
+                          </p>
+                        </div>
+                        {userRole !== "EMPLOYER" && (
+                          <button
+                            onClick={() => onApply(String(job.id))}
+                            disabled={applied}
+                            className={`flex-shrink-0 flex items-center gap-1 px-3.5 py-2 rounded-full text-xs font-semibold transition-all duration-150 ${
+                              applied
+                                ? "bg-[#E6F2E8] text-[#2D6B3D] cursor-default"
+                                : "bg-[#E07B39] text-[#FFFDF9] hover:bg-[#CA6A28] active:scale-95"
+                            }`}
+                          >
+                            {applied ? (
+                              <>
+                                <Check className="w-3 h-3" /> Applied
+                              </>
+                            ) : (
+                              <>
+                                Apply <ArrowRight className="w-3 h-3" />
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <p className="font-['Fraunces'] text-2xl text-[#7C4A2D] mb-2">No jobs available right now.</p>
+                <p className="text-sm text-[#8C7B6E]">Please check back later!</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ── STATS BAND ───────────────────────────────────────────────── */}
+        <section className="bg-[#2C1A0E] text-[#FAF7F2] py-10 sm:py-12">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-4">
+              {[
+                { icon: Briefcase, value: `${totalJobs}+`, label: "Jobs live right now" },
+                { icon: Users, value: "100%", label: "Verified local employers" },
+                { icon: TrendingUp, value: "Direct", label: "No middleman platform cuts" },
+                { icon: MapPin, value: CITY, label: "All inside the city" },
+              ].map(({ icon: Icon, value, label }) => (
+                <div key={label} className="text-center">
+                  <div className="w-10 h-10 bg-[#FFFDF9]/10 rounded-xl flex items-center justify-center mx-auto mb-3">
+                    <Icon className="w-5 h-5 text-[#E07B39]" />
+                  </div>
+                  <p className="font-['Fraunces'] text-3xl font-bold text-[#FAF7F2]">
+                    {value}
+                  </p>
+                  <p className="text-xs text-[#FAF7F2]/60 mt-1 leading-snug">
+                    {label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── HOW IT WORKS ─────────────────────────────────────────────── */}
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+          <div className="text-center mb-10">
+            <p className="text-xs font-medium uppercase tracking-widest text-[#8C7B6E] mb-2">
+              Simple as it gets
+            </p>
+            <h2 className="font-['Fraunces'] text-2xl sm:text-3xl font-bold text-[#7C4A2D] mb-6">
+              How LocalGig works
+            </h2>
+            <div className="inline-flex bg-[#F0EBE3] rounded-xl p-1">
+              {(["worker", "employer"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setHowWorksTab(t)}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                    howWorksTab === t
+                      ? "bg-[#FFFDF9] text-[#7C4A2D] shadow-sm border border-[#E8DDD4]"
+                      : "text-[#8C7B6E] hover:text-[#2C1A0E]"
+                  }`}
+                >
+                  {t === "worker" ? "I'm looking for work" : "I need to hire"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
+            {HOW_IT_WORKS[howWorksTab].map(({ icon: Icon, step, title, body }) => (
+              <div key={step} className="relative">
+                {/* Connector line (desktop) */}
+                <div
+                  className="hidden sm:block absolute top-6 left-[calc(50%+32px)] right-[-50%] h-px bg-[#E8DDD4]"
+                  aria-hidden="true"
+                />
+                <div className="flex flex-col items-center text-center">
+                  <div className="relative mb-5">
+                    <div className="w-14 h-14 bg-[#F0EBE3] rounded-2xl flex items-center justify-center border border-[#E8DDD4]">
+                      <Icon className="w-6 h-6 text-[#7C4A2D]" />
+                    </div>
+                    <span className="absolute -top-2 -right-2 w-6 h-6 bg-[#E07B39] text-[#FFFDF9] text-[10px] font-bold rounded-full flex items-center justify-center">
+                      {step}
+                    </span>
+                  </div>
+                  <h3 className="font-['Fraunces'] font-bold text-lg text-[#7C4A2D] mb-2">
+                    {title}
+                  </h3>
+                  <p className="text-sm text-[#8C7B6E] leading-relaxed">
+                    {body}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── DUAL CTA ─────────────────────────────────────────────────── */}
+        <section className="max-w-6xl mx-auto px-4 sm:px-6 pb-16">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Worker CTA */}
+            <div className="bg-[#7C4A2D] rounded-3xl p-8 sm:p-10 flex flex-col gap-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-[#FFFDF9]/5 rounded-full -translate-y-16 translate-x-16" />
+              <div className="absolute bottom-0 left-0 w-32 h-32 bg-[#FFFDF9]/5 rounded-full translate-y-12 -translate-x-12" />
+              <p className="text-xs font-medium uppercase tracking-widest text-[#FFFDF9]/60">
+                For workers
+              </p>
+              <h3 className="font-['Fraunces'] text-2xl sm:text-3xl font-bold text-[#FAF7F2] leading-snug">
+                Find your next job
+                <br />
+                <em className="font-normal">in {CITY} today.</em>
+              </h3>
+              <p className="text-[#FAF7F2]/70 text-sm leading-relaxed mb-4">
+                Free to join. No CV needed. Just your skills and a phone number.
+              </p>
+              <button
+                onClick={onJobs}
+                className="self-start flex items-center gap-2 bg-[#E07B39] text-[#FFFDF9] px-5 py-3 rounded-full text-sm font-semibold hover:bg-[#CA6A28] transition-all hover:scale-[1.03] active:scale-95 duration-150"
+              >
+                Browse jobs <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Employer CTA */}
+            <div className="bg-[#FFFDF9] border-2 border-[#E8DDD4] rounded-3xl p-8 sm:p-10 flex flex-col gap-5 relative overflow-hidden hover:border-[#7C4A2D] transition-colors">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-[#F0EBE3] rounded-full -translate-y-16 translate-x-16" />
+              <p className="text-xs font-medium uppercase tracking-widest text-[#8C7B6E]">
+                For businesses
+              </p>
+              <h3 className="font-['Fraunces'] text-2xl sm:text-3xl font-bold text-[#7C4A2D] leading-snug">
+                Find reliable help
+                <br />
+                <em className="font-normal">right around the corner.</em>
+              </h3>
+              <p className="text-[#8C7B6E] text-sm leading-relaxed mb-4">
+                Post a job in minutes. Workers apply, you pick who to call.
+              </p>
+              <button
+                onClick={() => onLogin("register", "employer")}
+                className="self-start flex items-center gap-2 bg-[#7C4A2D] text-[#FAF7F2] px-5 py-3 rounded-full text-sm font-semibold hover:bg-[#5E3820] transition-all hover:scale-[1.03] active:scale-95 duration-150"
+              >
+                Post a job — it's free <ArrowRight className="w-4 h-4" />
               </button>
             </div>
           </div>
-          <div className="hidden lg:flex h-64 xl:h-72 items-end justify-center">
-            <NeighbourhoodIllustration />
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Filters + Listings */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
-        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-          <div className="flex flex-wrap gap-2">
-            {filters.map((f) => (
+        {/* ── FOOTER ───────────────────────────────────────────────────── */}
+        <footer className="border-t border-[#E8DDD4] bg-[#FFFDF9]">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <p className="font-['Fraunces'] text-xl text-[#7C4A2D] italic font-semibold">
+                LocalGig
+              </p>
+              <p className="text-sm text-[#8C7B6E] mt-1">
+                Serving {CITY}, one job at a time.
+              </p>
+            </div>
+            <div className="flex gap-6 text-sm text-[#8C7B6E]">
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all duration-150 ${
-                  filter === f
-                    ? "bg-[#7C4A2D] text-[#FAF7F2] shadow-sm"
-                    : "bg-[#FFFDF9] border border-[#E8DDD4] text-[#8C7B6E] hover:border-[#7C4A2D] hover:text-[#7C4A2D]"
-                }`}
+                onClick={() => onLogin("register", "employer")}
+                className="hover:text-[#2C1A0E] transition-colors"
               >
-                {f}
+                Post a Job
               </button>
-            ))}
+              <button
+                onClick={onJobs}
+                className="hover:text-[#2C1A0E] transition-colors"
+              >
+                Browse Jobs
+              </button>
+              <span className="hover:text-[#2C1A0E] transition-colors cursor-pointer">
+                Contact
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-[#8C7B6E]">{filtered.length} openings</span>
-            <button onClick={onJobs} className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1">
-              View all <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {filtered.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {filtered.slice(0, 6).map((job) => (
-              <JobCard
-                key={job.id}
-                job={job}
-                showApplyButton={userRole !== "EMPLOYER"}
-                applied={appliedIds.has(String(job.id))}
-                onApply={() => onApply(String(job.id))}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-24">
-            <p className="font-['Fraunces'] text-2xl text-[#7C4A2D] mb-2">Nothing found here.</p>
-            <p className="text-sm text-[#8C7B6E]">Try a different search or clear the filter.</p>
-          </div>
-        )}
-
-        {totalJobs > 6 && (
-          <div className="text-center mt-8">
-            <button onClick={onJobs} className="inline-flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] text-[#7C4A2D] font-medium text-sm px-6 py-3 rounded-full hover:bg-[#F0EBE3] hover:border-[#7C4A2D] transition-all shadow-sm">
-              Browse all {totalJobs} jobs <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-[#E8DDD4] bg-[#FFFDF9] mt-6">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="font-['Fraunces'] text-xl text-[#7C4A2D] italic">
-            Serving {CITY}, one job at a time.
-          </p>
-          <div className="flex gap-6 text-sm text-[#8C7B6E]">
-            <button onClick={() => onLogin("register", "employer")} className="hover:text-[#2C1A0E] transition-colors">Post a Job</button>
-            <button onClick={onJobs} className="hover:text-[#2C1A0E] transition-colors">Browse Jobs</button>
-            <span className="hover:text-[#2C1A0E] transition-colors cursor-pointer">Contact</span>
-          </div>
-        </div>
-      </footer>
-    </main>
+        </footer>
+      </main>
+    </>
   );
 }
 
