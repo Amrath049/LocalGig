@@ -18,8 +18,9 @@ import {
   ChevronDown,
   Menu,
   Settings,
+  Trash2,
 } from "lucide-react";
-import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus } from "../lib/api";
+import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ type JobFilter = "All" | "Full-time" | "Part-time" | "Gig";
 type WorkerTab = "browse" | "applications";
 type EmployerTab = "listings" | "post";
 type PayType = "Fixed" | "Range" | "Open to discuss";
-type AppStatus = "Applied" | "Seen" | "Shortlisted" | "Hired";
+type AppStatus = "Applied" | "Seen" | "Shortlisted" | "Hired" | "Not Selected" | "Removed";
 type ApplicantStatus = "Applied" | "Seen" | "Shortlisted" | "Hired" | "NOT_SELECTED" | "Declined";
 type SortOption = "newest" | "oldest";
 
@@ -84,22 +85,27 @@ function apiStatusToUiStatus(status: string): AppStatus {
     seen: "Seen",
     shortlisted: "Shortlisted",
     hired: "Hired",
+    not_selected: "Not Selected",
     APPLIED: "Applied",
     SEEN: "Seen",
     SHORTLISTED: "Shortlisted",
     HIRED: "Hired",
+    NOT_SELECTED: "Not Selected",
   };
 
   return statusMap[status] ?? statusMap[status.toLowerCase()] ?? "Applied";
 }
 
 function apiApplicationToUiApplication(application: any): MyApplication {
+  const isJobRemoved =
+    application.job?.status === "removed" ||
+    application.job?.status === "REMOVED";
   return {
     id: String(application.id),
     title: application.job?.title ?? "",
     employer: application.job?.employer?.email ?? "Local employer",
     appliedDate: new Date(application.createdAt).toLocaleDateString(),
-    status: apiStatusToUiStatus(application.status),
+    status: isJobRemoved ? "Removed" : apiStatusToUiStatus(application.status),
   };
 }
 
@@ -1413,25 +1419,35 @@ function WorkerDashboard({
                     {app.status}
                   </span>
                 </div>
-                <div className="flex items-start overflow-x-auto pb-1">
-                  {STATUS_FLOW.map((step, i) => {
-                    const done = i <= stepIdx;
-                    const current = i === stepIdx;
-                    return (
-                      <div key={step} className="flex items-start flex-1 min-w-[60px]">
-                        <div className="flex flex-col items-center">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${done ? "border-[#6A9E78] bg-[#6A9E78]" : "border-[#E8DDD4] bg-[#FAF7F2]"} ${current ? "ring-2 ring-offset-1 ring-[#6A9E78]/40" : ""}`}>
-                            {done && <Check className="w-3 h-3 text-white" />}
+                {app.status === "Not Selected" ? (
+                  <div className="text-sm font-medium text-[#C0503A] bg-[#FDE8E5] px-4 py-2.5 rounded-xl border border-[#FCD2CB] text-center sm:text-left">
+                    This application was not selected by the employer.
+                  </div>
+                ) : app.status === "Removed" ? (
+                  <div className="text-sm font-medium text-[#C0503A] bg-[#FDE8E5] px-4 py-2.5 rounded-xl border border-[#FCD2CB] text-center sm:text-left">
+                    This job listing has been removed by the employer.
+                  </div>
+                ) : (
+                  <div className="flex items-start overflow-x-auto pb-1">
+                    {STATUS_FLOW.map((step, i) => {
+                      const done = i <= stepIdx;
+                      const current = i === stepIdx;
+                      return (
+                        <div key={step} className="flex items-start flex-1 min-w-[60px]">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${done ? "border-[#6A9E78] bg-[#6A9E78]" : "border-[#E8DDD4] bg-[#FAF7F2]"} ${current ? "ring-2 ring-offset-1 ring-[#6A9E78]/40" : ""}`}>
+                              {done && <Check className="w-3 h-3 text-white" />}
+                            </div>
+                            <span className={`text-[10px] font-medium mt-1.5 text-center leading-tight max-w-[52px] ${done ? "text-[#3D6B4F]" : "text-[#8C7B6E]"}`}>{step}</span>
                           </div>
-                          <span className={`text-[10px] font-medium mt-1.5 text-center leading-tight max-w-[52px] ${done ? "text-[#3D6B4F]" : "text-[#8C7B6E]"}`}>{step}</span>
+                          {i < STATUS_FLOW.length - 1 && (
+                            <div className={`flex-1 h-0.5 mt-3 mx-1 transition-all duration-300 min-w-[20px] ${i < stepIdx ? "bg-[#6A9E78]" : "bg-[#E8DDD4]"}`} />
+                          )}
                         </div>
-                        {i < STATUS_FLOW.length - 1 && (
-                          <div className={`flex-1 h-0.5 mt-3 mx-1 transition-all duration-300 min-w-[20px] ${i < stepIdx ? "bg-[#6A9E78]" : "bg-[#E8DDD4]"}`} />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1461,6 +1477,22 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
   const [postSkills, setPostSkills] = useState("");
   const [postNotes, setPostNotes] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  async function handleRemoveJob(listingId: string) {
+    if (!token) return;
+    if (!window.confirm("Are you sure you want to remove this job listing? It will be hidden from the public list, and applicants will see it as removed.")) {
+      return;
+    }
+    try {
+      await removeJob(token, listingId);
+      setListings((prev) => prev.filter((l) => l.id !== listingId));
+      setSelectedId(null);
+      setStatusMessage("Job listing removed.");
+    } catch (error) {
+      console.error("Failed to remove job listing", error);
+      setStatusMessage("Unable to remove job listing.");
+    }
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -1595,9 +1627,14 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
           <button onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-[#8C7B6E] hover:text-[#2C1A0E] mb-6 transition-colors font-medium">
             <ArrowRight className="w-3.5 h-3.5 rotate-180" /> Back to listings
           </button>
-          <div className="mb-6">
-            <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D]">{activeListing.title}</h2>
-            <p className="text-[#8C7B6E] text-sm mt-1">{activeListing.applicants.length} {activeListing.applicants.length === 1 ? "person" : "people"} applied</p>
+          <div className="mb-6 flex justify-between items-start flex-wrap gap-4">
+            <div>
+              <h2 className="font-['Fraunces'] text-2xl font-bold text-[#7C4A2D]">{activeListing.title}</h2>
+              <p className="text-[#8C7B6E] text-sm mt-1">{activeListing.applicants.length} {activeListing.applicants.length === 1 ? "person" : "people"} applied</p>
+            </div>
+            <button onClick={() => handleRemoveJob(activeListing.id)} className="px-4 py-2 bg-[#FDE8E5] text-[#C0503A] border border-[#FCD2CB] rounded-xl text-xs font-semibold hover:bg-[#C0503A] hover:text-white transition-all flex items-center gap-1.5 shadow-sm">
+              <Trash2 className="w-3.5 h-3.5" /> Remove Listing
+            </button>
           </div>
           <div className="flex flex-col gap-3">
             {activeListing.applicants.map((a) => (

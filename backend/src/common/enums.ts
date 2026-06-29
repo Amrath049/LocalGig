@@ -1,6 +1,7 @@
 export enum JobStatus {
   OPEN = 'open',
   CLOSED = 'closed',
+  REMOVED = 'removed',
 }
 
 export enum PayType {

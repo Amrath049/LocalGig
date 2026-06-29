@@ -247,3 +247,17 @@ export async function updateProfile(
     body: JSON.stringify(data),
   });
 }
+
+export async function closeJob(token: string, jobId: string) {
+  return apiFetch<any>(`/jobs/${jobId}/close`, {
+    method: "PATCH",
+    headers: getHeaders(token, false),
+  });
+}
+
+export async function removeJob(token: string, jobId: string) {
+  return apiFetch<any>(`/jobs/${jobId}/remove`, {
+    method: "PATCH",
+    headers: getHeaders(token, false),
+  });
+}

@@ -82,7 +82,10 @@ export class JobsRepository {
 
   listJobsByEmployer(employerId: string) {
     return this.prisma.job.findMany({
-      where: { employerId },
+      where: {
+        employerId,
+        status: { not: JobStatus.REMOVED },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         applications: {
@@ -100,6 +103,13 @@ export class JobsRepository {
     return this.prisma.job.update({
       where: { id: jobId },
       data: { status: JobStatus.CLOSED, closedAt: new Date() },
+    });
+  }
+
+  removeJob(jobId: string) {
+    return this.prisma.job.update({
+      where: { id: jobId },
+      data: { status: JobStatus.REMOVED },
     });
   }
 }

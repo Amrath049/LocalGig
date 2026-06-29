@@ -75,4 +75,12 @@ export class JobsController {
     this.logger.log('Close job called');
     return this.jobsService.closeJob(id, user.id);
   }
+
+  @Patch(':id/remove')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('EMPLOYER')
+  remove(@CurrentUser() user: any, @Param('id') id: string) {
+    this.logger.log('Remove job called');
+    return this.jobsService.removeJob(id, user.id);
+  }
 }

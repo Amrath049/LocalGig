@@ -121,6 +121,19 @@ export class JobsService {
     return closedJob;
   }
 
+  async removeJob(jobId: string, userId: string) {
+    const job = await this.jobsRepository.findJobById(jobId);
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+    if (job.employerId !== userId) {
+      throw new ForbiddenException('You are not allowed to remove this job');
+    }
+    const removedJob = await this.jobsRepository.removeJob(jobId);
+    await this.enqueueSearchUpdate(jobId, 'remove');
+    return removedJob;
+  }
+
   private async enqueueSearchUpdate(
     jobId: string,
     action: 'index' | 'remove' = 'index',
