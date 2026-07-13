@@ -81,6 +81,7 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     sort?: string;
     limit?: number;
     page?: number;
+    workerSkills?: string;
   }) {
     const filter: Array<Record<string, unknown>> = [
       { term: { status: JobStatus.OPEN } },
@@ -113,46 +114,67 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
       if (skillsList.length > 0) {
         filter.push({
           terms: {
-            skills: skillsList,
+            skills: skillsList.map((s) => s.toLowerCase()),
           },
         });
       }
     }
 
-    // Build a robust search that supports fuzzy matches, prefix matches and
-    // falls back to simpler queries. This helps with typos like "dryver" → "driver"
-    // and improves matching for short/partial terms.
+    const must: Array<Record<string, unknown>> = [];
     const should: Array<Record<string, unknown>> = [];
-    if (filters.search) {
-      // Fuzzy multi-field match (boost title)
-      should.push({
-        multi_match: {
-          query: filters.search,
-          fields: ['title^5', 'description', 'location', 'skills'],
-          fuzziness: 2,
-          prefix_length: 1,
-          max_expansions: 50,
-        },
-      });
 
-      // Individual fuzzy field matches to increase recall for typos
-      should.push({
-        match: {
-          title: {
-            query: filters.search,
-            fuzziness: 2,
-            boost: 5,
-          },
+    if (filters.search) {
+      must.push({
+        bool: {
+          should: [
+            {
+              multi_match: {
+                query: filters.search,
+                fields: ['title^5', 'description', 'location', 'skills'],
+                fuzziness: 'AUTO',
+                prefix_length: 1,
+                max_expansions: 50,
+              },
+            },
+            {
+              match: {
+                title: {
+                  query: filters.search,
+                  fuzziness: 'AUTO',
+                  boost: 5,
+                },
+              },
+            },
+            {
+              match: {
+                description: {
+                  query: filters.search,
+                  fuzziness: 'AUTO',
+                },
+              },
+            },
+          ],
+          minimum_should_match: 1,
         },
       });
-      should.push({
-        match: {
-          description: {
-            query: filters.search,
-            fuzziness: 2,
+    } else {
+      must.push({ match_all: {} });
+    }
+
+    // Boost matching candidate skills
+    if (filters.workerSkills) {
+      const workerSkillsList = filters.workerSkills
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (workerSkillsList.length > 0) {
+        should.push({
+          terms: {
+            skills: workerSkillsList,
+            boost: 2.5,
           },
-        },
-      });
+        });
+      }
     }
 
     const sortOrder = filters.sort === 'oldest' ? 'asc' : 'desc';
@@ -163,39 +185,195 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     const body: Record<string, unknown> = {
       size: limit,
       from,
-      sort: [{ createdAt: { order: sortOrder } }],
+      sort:
+        filters.sort === 'oldest'
+          ? [{ createdAt: { order: 'asc' } }]
+          : filters.search || filters.workerSkills
+          ? [{ _score: { order: 'desc' } }, { createdAt: { order: 'desc' } }]
+          : [{ createdAt: { order: 'desc' } }],
       query: {
         bool: {
           filter,
-          ...(should.length
-            ? { should, minimum_should_match: 1 }
-            : { must: [{ match_all: {} }] }),
+          must,
+          ...(should.length ? { should } : {}),
+        },
+      },
+      aggs: {
+        all_skills: {
+          terms: { field: 'skills', size: 30 },
+        },
+        all_types: {
+          terms: { field: 'type', size: 10 },
+        },
+        all_locations: {
+          terms: { field: 'location.keyword', size: 30 },
         },
       },
     };
 
-    const response = await this.request<{
-      hits: {
-        total: { value: number } | number;
-        hits: Array<{ _source: IndexedJob }>;
+    if (filters.search) {
+      body.highlight = {
+        fields: {
+          title: {},
+          description: { fragment_size: 150, number_of_fragments: 1 },
+        },
+        pre_tags: [
+          '<mark class="bg-orange-100 text-[#7C4A2D] font-medium px-1 rounded">',
+        ],
+        post_tags: ['</mark>'],
       };
-    }>(`/${this.indexName}/_search`, {
+    }
+
+    const response = await this.request<any>(`/${this.indexName}/_search`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
 
     const total =
       typeof response.hits.total === 'object'
-        ? (response.hits.total as any).value
-        : (response.hits.total as number) || 0;
+        ? response.hits.total.value
+        : response.hits.total || 0;
+
+    const jobs = response.hits.hits.map((hit: any) => {
+      const job = hit._source;
+      if (hit.highlight) {
+        if (hit.highlight.title) {
+          job.highlightedTitle = hit.highlight.title[0];
+        }
+        if (hit.highlight.description) {
+          job.highlightedDescription = hit.highlight.description[0];
+        }
+      }
+      return job;
+    });
+
+    const facets = {
+      skills: response.aggregations?.all_skills?.buckets ?? [],
+      types: response.aggregations?.all_types?.buckets ?? [],
+      locations: response.aggregations?.all_locations?.buckets ?? [],
+    };
 
     return {
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      jobs: response.hits.hits.map((hit) => hit._source),
+      jobs,
+      facets,
     };
+  }
+
+  async getSimilarJobs(jobId: string, limit = 3) {
+    const body = {
+      size: limit,
+      query: {
+        bool: {
+          filter: [{ term: { status: JobStatus.OPEN } }],
+          must_not: [{ term: { id: jobId } }],
+          must: [
+            {
+              more_like_this: {
+                fields: ['title', 'description', 'skills'],
+                like: [{ _index: this.indexName, _id: jobId }],
+                min_term_freq: 1,
+                max_query_terms: 12,
+                min_doc_freq: 1,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    try {
+      const response = await this.request<{
+        hits: {
+          hits: Array<{ _source: IndexedJob }>;
+        };
+      }>(`/${this.indexName}/_search`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      return response.hits.hits.map((hit) => hit._source);
+    } catch (error) {
+      console.log({ error });
+      this.logger.error(
+        `Failed to fetch similar jobs for ${jobId}: ${(error as Error).message}`,
+      );
+      return [];
+    }
+  }
+
+  async suggestJobs(query: string, limit = 5) {
+    if (!query) return [];
+
+    const body = {
+      size: limit * 2,
+      query: {
+        bool: {
+          filter: [{ term: { status: JobStatus.OPEN } }],
+          should: [
+            {
+              match_phrase_prefix: {
+                title: {
+                  query,
+                  boost: 3,
+                },
+              },
+            },
+            {
+              prefix: {
+                skills: {
+                  value: query,
+                  case_insensitive: true,
+                  boost: 2,
+                },
+              },
+            },
+            {
+              prefix: {
+                title: {
+                  value: query.toLowerCase(),
+                  boost: 1.5,
+                },
+              },
+            },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    };
+
+    try {
+      const response = await this.request<{
+        hits: {
+          hits: Array<{ _source: IndexedJob }>;
+        };
+      }>(`/${this.indexName}/_search`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+
+      const suggestions = new Set<string>();
+      for (const hit of response.hits.hits) {
+        const job = hit._source;
+        if (job.title.toLowerCase().includes(query.toLowerCase())) {
+          suggestions.add(job.title);
+        }
+        for (const skill of job.skills ?? []) {
+          if (skill.toLowerCase().includes(query.toLowerCase())) {
+            suggestions.add(skill);
+          }
+        }
+      }
+      return Array.from(suggestions).slice(0, limit);
+    } catch (error) {
+      this.logger.error(
+        `Failed to get suggestions for query "${query}": ${(error as Error).message}`,
+      );
+      return [];
+    }
   }
 
   private async processQueue() {
@@ -230,20 +408,29 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     const exists = await this.requestRaw(`/${this.indexName}`, {
       method: 'HEAD',
     });
+    let needsRecreate = false;
     if (exists.ok) {
-      // Attempt to add the `skills` property to an existing index mapping if it's
-      // not already present. Adding new fields to mappings is allowed; ignore
-      // failures and continue.
       try {
-        await this.request(`/${this.indexName}/_mapping`, {
-          method: 'PUT',
-          body: JSON.stringify({ properties: { skills: { type: 'keyword' } } }),
-        });
+        const mapping = await this.request<any>(`/${this.indexName}/_mapping`);
+        const locationMapping =
+          mapping[this.indexName]?.mappings?.properties?.location;
+        if (!locationMapping?.fields?.keyword) {
+          this.logger.log(
+            `Outdated index mapping detected for ${this.indexName}, deleting...`,
+          );
+          await this.requestRaw(`/${this.indexName}`, { method: 'DELETE' });
+          needsRecreate = true;
+        }
       } catch (error) {
         this.logger.warn(
-          `Failed to update mapping for ${this.indexName}: ${(error as Error).message}`,
+          `Failed to inspect mapping: ${(error as Error).message}`,
         );
       }
+    } else {
+      needsRecreate = true;
+    }
+
+    if (!needsRecreate) {
       return;
     }
 
@@ -255,13 +442,17 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
           description: { type: 'text' },
           type: { type: 'keyword' },
           status: { type: 'keyword' },
-          location: { type: 'text' },
+          location: {
+            type: 'text',
+            fields: {
+              keyword: { type: 'keyword', ignore_above: 256 },
+            },
+          },
           payType: { type: 'keyword' },
           payAmount: { type: 'integer' },
           payMin: { type: 'integer' },
           payMax: { type: 'integer' },
           payCustom: { type: 'text' },
-          // Optional skills/tags field (not yet present on the Job model)
           skills: { type: 'keyword' },
           createdAt: { type: 'date' },
           employer: {
@@ -278,7 +469,9 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
       method: 'PUT',
       body: JSON.stringify(body),
     });
-    this.logger.log(`Search index ${this.indexName} is ready`);
+    this.logger.log(
+      `Search index ${this.indexName} created with updated mappings`,
+    );
   }
 
   private async indexJob(job: IndexedJob) {
@@ -314,9 +507,7 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
         id: job.employer.id,
         email: job.employer.email,
       },
-      // If/when jobs include explicit skill tags, populate this array. For now
-      // include an empty array to keep the field present.
-      skills: (job as any).skills ?? [],
+      skills: job.skills ?? [],
       createdAt: job.createdAt.toISOString(),
     };
   }

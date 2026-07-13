@@ -39,6 +39,9 @@ export type ApiJob = {
   };
   applications?: Array<{ id: string }>; // employer jobs include applications
   createdAt: string;
+  skills?: string[];
+  highlightedTitle?: string;
+  highlightedDescription?: string;
 };
 
 export type ApiUserProfile = {
@@ -138,6 +141,11 @@ export type GetJobsResponse = {
   limit: number;
   totalPages: number;
   jobs: ApiJob[];
+  facets?: {
+    skills?: Array<{ key: string; doc_count: number }>;
+    types?: Array<{ key: string; doc_count: number }>;
+    locations?: Array<{ key: string; doc_count: number }>;
+  };
 };
 
 export async function getJobs(
@@ -148,6 +156,7 @@ export async function getJobs(
   sort?: string,
   page?: number,
   limit?: number,
+  workerSkills?: string,
 ) {
   const query = new URLSearchParams();
   if (search) query.set("search", search);
@@ -157,8 +166,17 @@ export async function getJobs(
   if (sort) query.set("sort", sort);
   if (page !== undefined) query.set("page", String(page));
   if (limit !== undefined) query.set("limit", String(limit));
+  if (workerSkills) query.set("workerSkills", workerSkills);
   const queryString = query.toString();
   return apiFetch<GetJobsResponse>(`/jobs${queryString ? `?${queryString}` : ""}`);
+}
+
+export async function getJobSuggestions(query: string) {
+  return apiFetch<string[]>(`/jobs/suggest?query=${encodeURIComponent(query)}`);
+}
+
+export async function getSimilarJobs(jobId: string) {
+  return apiFetch<ApiJob[]>(`/jobs/${jobId}/similar`);
 }
 
 export async function getMyApplications(token: string) {

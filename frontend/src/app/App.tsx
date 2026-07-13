@@ -30,7 +30,7 @@ import {
   Users,
   TrendingUp,
 } from "lucide-react";
-import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob } from "../lib/api";
+import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob, getJobSuggestions, getSimilarJobs } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -47,6 +47,7 @@ type SortOption = "newest" | "oldest";
 interface Job {
   id: string | number;
   title: string;
+  description: string;
   employer: string;
   verified: boolean;
   type: string;
@@ -56,6 +57,8 @@ interface Job {
   posted: string;
   postedDays: number; // 0 = today
   location: string;
+  highlightedTitle?: string;
+  highlightedDescription?: string;
 }
 
 function apiJobToUiJob(job: any): Job {
@@ -77,15 +80,18 @@ function apiJobToUiJob(job: any): Job {
   return {
     id: String(job.id),
     title: job.title,
+    description: job.description ?? "",
     employer: job.employer?.email ?? "Local employer",
     verified: true,
     type: typeMap[job.type as string] ?? "Gig",
     pay,
     payValue: job.payAmount ?? job.payMin ?? 0,
-    skills: [],
+    skills: job.skills ?? [],
     posted: new Date(job.createdAt).toLocaleDateString(),
     postedDays: 0,
     location: job.location ?? "Nearby",
+    highlightedTitle: job.highlightedTitle,
+    highlightedDescription: job.highlightedDescription,
   };
 }
 
@@ -116,6 +122,7 @@ function apiApplicationToUiApplication(application: any): MyApplication {
     employer: application.job?.employer?.email ?? "Local employer",
     appliedDate: new Date(application.createdAt).toLocaleDateString(),
     status: isJobRemoved ? "Removed" : apiStatusToUiStatus(application.status),
+    job: apiJobToUiJob(application.job ?? {}),
   };
 }
 
@@ -157,6 +164,7 @@ interface MyApplication {
   employer: string;
   appliedDate: string;
   status: AppStatus;
+  job: Job;
 }
 
 interface Applicant {
@@ -305,14 +313,24 @@ interface JobCardProps {
   showApplyButton?: boolean;
   applicantBadge?: number;
   onViewApplicants?: () => void;
+  onClick?: () => void;
 }
 
-function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadge, onViewApplicants }: JobCardProps) {
+function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadge, onViewApplicants, onClick }: JobCardProps) {
   return (
-    <div className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 flex flex-col gap-4 shadow-[0_2px_12px_rgba(44,26,14,0.07)] hover:shadow-[0_4px_20px_rgba(44,26,14,0.12)] hover:-translate-y-0.5 transition-all duration-200">
+    <div 
+      onClick={onClick}
+      className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-5 flex flex-col gap-4 shadow-[0_2px_12px_rgba(44,26,14,0.07)] hover:shadow-[0_4px_20px_rgba(44,26,14,0.12)] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer text-left"
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-['Fraunces'] font-bold text-[17px] text-[#7C4A2D] leading-snug">{job.title}</h3>
+          <h3 className="font-['Fraunces'] font-bold text-[17px] text-[#7C4A2D] leading-snug">
+            {job.highlightedTitle ? (
+              <span dangerouslySetInnerHTML={{ __html: job.highlightedTitle }} />
+            ) : (
+              job.title
+            )}
+          </h3>
           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             <span className="text-sm text-[#8C7B6E]">{job.employer}</span>
             {job.verified && <CheckCircle className="w-3.5 h-3.5 text-[#6A9E78] flex-shrink-0" />}
@@ -335,6 +353,13 @@ function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadg
         {job.skills.map((s) => <SkillTag key={s} label={s} />)}
       </div>
 
+      {job.highlightedDescription && (
+        <p 
+          className="text-xs text-[#8C7B6E] italic bg-[#F0EBE3]/20 p-2.5 rounded-xl border border-[#E8DDD4]/30 line-clamp-2"
+          dangerouslySetInnerHTML={{ __html: `...${job.highlightedDescription}...` }}
+        />
+      )}
+
       <div className="flex items-center justify-between pt-2 border-t border-[#E8DDD4]/70">
         <div>
           <p className="font-semibold text-[#2C1A0E] text-sm">{job.pay}</p>
@@ -345,7 +370,7 @@ function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadg
         <div className="flex gap-2">
           {showApplyButton && (
             <button
-              onClick={onApply}
+              onClick={(e) => { e.stopPropagation(); onApply?.(); }}
               disabled={applied}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
                 applied
@@ -357,13 +382,174 @@ function JobCard({ job, applied, onApply, showApplyButton = false, applicantBadg
             </button>
           )}
           {onViewApplicants && (
-            <button onClick={onViewApplicants} className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-[#F0EBE3] text-[#7C4A2D] border border-[#E8DDD4] hover:bg-[#E8DDD4] transition-colors">
+            <button 
+              onClick={(e) => { e.stopPropagation(); onViewApplicants?.(); }} 
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-[#F0EBE3] text-[#7C4A2D] border border-[#E8DDD4] hover:bg-[#E8DDD4] transition-colors"
+            >
               View <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
           {!showApplyButton && !onViewApplicants && (
             <button className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium bg-[#E07B39] text-[#FFFDF9] hover:bg-[#CA6A28] active:scale-95 transition-all duration-150">
               Apply Now <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Job Details Modal ────────────────────────────────────────────────────────
+
+interface JobDetailsModalProps {
+  job: Job | null;
+  onClose: () => void;
+  applied: boolean;
+  onApply: () => void;
+  showApplyButton: boolean;
+  onSelectJob: (j: Job) => void;
+}
+
+function JobDetailsModal({ job, onClose, applied, onApply, showApplyButton, onSelectJob }: JobDetailsModalProps) {
+  const [similarJobs, setSimilarJobs] = useState<Job[]>([]);
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
+
+  useEffect(() => {
+    if (!job) {
+      setSimilarJobs([]);
+      return;
+    }
+
+    async function loadSimilar() {
+      setIsLoadingSimilar(true);
+      try {
+        const res = await getSimilarJobs(String(job.id));
+        setSimilarJobs(res.map(apiJobToUiJob));
+      } catch (err) {
+        console.error("Failed to load similar jobs", err);
+      } finally {
+        setIsLoadingSimilar(false);
+      }
+    }
+    loadSimilar();
+  }, [job]);
+
+  if (!job) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div 
+        className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PaperTexture />
+        
+        {/* Header */}
+        <div className="p-6 border-b border-[#E8DDD4]/60 flex items-start justify-between z-10">
+          <div className="min-w-0">
+            <h2 className="font-['Fraunces'] font-bold text-2xl text-[#7C4A2D] leading-snug">
+              {job.highlightedTitle ? (
+                <span dangerouslySetInnerHTML={{ __html: job.highlightedTitle }} />
+              ) : (
+                job.title
+              )}
+            </h2>
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              <span className="text-sm font-medium text-[#2C1A0E]">{job.employer}</span>
+              {job.verified && <CheckCircle className="w-4 h-4 text-[#6A9E78] flex-shrink-0" />}
+              <span className="text-xs text-[#8C7B6E] flex items-center gap-0.5">
+                <MapPin className="w-3 h-3" /> {job.location}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-[#F0EBE3] text-[#8C7B6E] hover:text-[#2C1A0E] transition-colors flex-shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 z-10">
+          {/* Quick info */}
+          <div className="flex flex-wrap gap-2">
+            <TypeTag label={job.type} />
+            {job.skills.map((s) => (
+              <SkillTag key={s} label={s} />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 p-4 bg-[#F0EBE3]/30 rounded-2xl border border-[#E8DDD4]/30">
+            <div>
+              <p className="text-xs text-[#8C7B6E] uppercase tracking-wider">Salary / Pay</p>
+              <p className="font-semibold text-[#2C1A0E] text-sm mt-0.5">{job.pay}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#8C7B6E] uppercase tracking-wider">Posted Date</p>
+              <p className="text-sm text-[#2C1A0E] font-medium mt-0.5">{job.posted}</p>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <h4 className="font-['Fraunces'] font-bold text-lg text-[#7C4A2D] mb-2">Job Description</h4>
+            <div className="text-sm text-[#2C1A0E] leading-relaxed whitespace-pre-wrap font-sans">
+              {job.description}
+            </div>
+          </div>
+
+          {/* Similar Jobs Widget */}
+          <div className="border-t border-[#E8DDD4]/60 pt-6">
+            <h4 className="font-['Fraunces'] font-bold text-base text-[#7C4A2D] mb-3">Similar Jobs You Might Like</h4>
+            {isLoadingSimilar ? (
+              <div className="flex gap-2 justify-center py-4">
+                <span className="w-1.5 h-1.5 bg-[#E07B39] rounded-full animate-bounce" />
+                <span className="w-1.5 h-1.5 bg-[#E07B39] rounded-full animate-bounce [animation-delay:0.1s]" />
+                <span className="w-1.5 h-1.5 bg-[#E07B39] rounded-full animate-bounce [animation-delay:0.2s]" />
+              </div>
+            ) : similarJobs.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {similarJobs.map((sj) => (
+                  <div
+                    key={sj.id}
+                    onClick={() => onSelectJob(sj)}
+                    className="p-3 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl hover:border-[#7C4A2D] cursor-pointer transition-colors shadow-sm flex flex-col gap-1.5 justify-between"
+                  >
+                    <div>
+                      <h5 className="font-bold text-xs text-[#7C4A2D] line-clamp-1">{sj.title}</h5>
+                      <p className="text-[10px] text-[#8C7B6E] line-clamp-1">{sj.employer}</p>
+                      <p className="text-[9px] text-[#8C7B6E] mt-1 line-clamp-1">{sj.location}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold text-[#2C1A0E] mt-1 block">{sj.pay}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[#8C7B6E] italic">No similar jobs found.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div className="p-6 border-t border-[#E8DDD4]/60 flex justify-end gap-3 bg-[#FAF7F2]/50 z-10">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-full text-sm font-medium border border-[#E8DDD4] text-[#8C7B6E] hover:bg-[#F0EBE3] transition-colors"
+          >
+            Close
+          </button>
+          {showApplyButton && (
+            <button
+              onClick={() => {
+                onApply();
+              }}
+              disabled={applied}
+              className={`px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-150 ${
+                applied
+                  ? "bg-[#E6F2E8] text-[#2D6B3D] cursor-default"
+                  : "bg-[#E07B39] text-[#FFFDF9] hover:bg-[#CA6A28] active:scale-95 shadow-md"
+              }`}
+            >
+              {applied ? "Applied" : "Apply Now"}
             </button>
           )}
         </div>
@@ -519,6 +705,7 @@ function JobsPage({
   onLoadMore,
   isFetchingMore,
   totalJobs,
+  onSelectJob,
 }: {
   jobs: Job[];
   isLoading: boolean;
@@ -535,9 +722,28 @@ function JobsPage({
   onLoadMore: () => void;
   isFetchingMore: boolean;
   totalJobs: number;
+  onSelectJob: (job: Job) => void;
 }) {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const observerTargetRef = useRef<HTMLDivElement | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (!search || !search.trim()) {
+      setSuggestions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getJobSuggestions(search);
+        setSuggestions(res);
+      } catch (err) {
+        console.error("Failed to load suggestions", err);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     if (!hasMore || isLoading || isFetchingMore) return;
@@ -582,19 +788,37 @@ function JobsPage({
 
       {/* Search + sort bar */}
       <div className="flex gap-2 mb-6 flex-wrap sm:flex-nowrap">
-        <div className="flex-1 flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 shadow-sm min-w-0">
+        <div className="flex-1 flex items-center gap-2 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl px-4 py-2.5 shadow-sm min-w-0 relative">
           <Search className="w-4 h-4 text-[#8C7B6E] flex-shrink-0" />
           <input
             type="text"
             placeholder="Search by title, skill, employer, or area…"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
             className="flex-1 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none min-w-0"
           />
           {search && (
             <button onClick={() => onSearchChange("")} className="text-[#8C7B6E] hover:text-[#2C1A0E] flex-shrink-0">
               <X className="w-3.5 h-3.5" />
             </button>
+          )}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl shadow-lg z-50 overflow-hidden max-h-60 overflow-y-auto">
+              {suggestions.map((s) => (
+                <button
+                  key={s}
+                  onMouseDown={() => {
+                    onSearchChange(s);
+                    setShowSuggestions(false);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[#2C1A0E] hover:bg-[#F0EBE3] transition-colors font-medium border-b border-[#E8DDD4]/30 last:border-0"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
@@ -683,6 +907,7 @@ function JobsPage({
                      showApplyButton={userRole !== "EMPLOYER"}
                      applied={appliedIds.has(String(job.id))}
                      onApply={() => onApply(String(job.id))}
+                     onClick={() => onSelectJob(job)}
                   />
                 ))}
               </div>
@@ -1001,25 +1226,36 @@ function HomePage({
   onLogin,
   onJobs,
   onSearch,
-  jobs,
   appliedIds,
   onApply,
   userRole,
-  totalJobs,
 }: {
   onLogin: (mode: "login" | "register", role: "worker" | "employer") => void;
   onJobs: () => void;
   onSearch: (query: string) => void;
-  jobs: Job[];
   appliedIds: Set<string>;
   onApply: (jobId: string) => void;
   userRole: string | null;
-  totalJobs: number;
 }) {
   const [search, setSearch] = useState("");
   const [howWorksTab, setHowWorksTab] = useState<"worker" | "employer">("worker");
+  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const heroCards = jobs.slice(0, 3);
+  useEffect(() => {
+    async function loadRecent() {
+      try {
+        const response = await getJobs();
+        setRecentJobs(response.jobs.map(apiJobToUiJob));
+        setTotalCount(response.total);
+      } catch (error) {
+        console.error("Failed to load recent jobs for home", error);
+      }
+    }
+    loadRecent();
+  }, []);
+
+  const heroCards = recentJobs.slice(0, 3);
 
 
   const handleSearch = () => {
@@ -1128,7 +1364,7 @@ function HomePage({
               {/* Mini stats */}
               <div className="flex items-center gap-6 mt-8 pt-6 border-t border-[#E8DDD4]">
                 {[
-                  { value: `${totalJobs}+`, label: "Live jobs" },
+                  { value: `${totalCount}+`, label: "Live jobs" },
                   { value: "Free", label: "Always free to apply" },
                 ].map(({ value, label }) => (
                   <div key={label}>
@@ -1232,13 +1468,13 @@ function HomePage({
                 onClick={onJobs}
                 className="text-sm font-medium text-[#E07B39] hover:text-[#CA6A28] transition-colors flex items-center gap-1"
               >
-                Browse all {totalJobs} jobs <ArrowRight className="w-3.5 h-3.5" />
+                Browse all {totalCount} jobs <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {jobs.length > 0 ? (
+            {recentJobs.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {jobs.slice(0, 6).map((job, i) => {
+                {recentJobs.slice(0, 6).map((job, i) => {
                   const rotations = ["-0.8deg", "0.6deg", "-0.4deg", "0.9deg", "-0.6deg", "0.4deg"];
                   const applied = appliedIds.has(String(job.id));
                   return (
@@ -1321,7 +1557,7 @@ function HomePage({
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 sm:gap-4">
               {[
-                { icon: Briefcase, value: `${totalJobs}+`, label: "Jobs live right now" },
+                { icon: Briefcase, value: `${totalCount}+`, label: "Jobs live right now" },
                 { icon: Users, value: "100%", label: "Verified local employers" },
                 { icon: TrendingUp, value: "Direct", label: "No middleman platform cuts" },
                 { icon: MapPin, value: CITY, label: "All inside the city" },
@@ -1771,6 +2007,7 @@ function WorkerDashboard({
   isLoadingApplications,
   onJobTypeFilterChange,
   totalJobs,
+  onSelectJob,
 }: {
   onBrowseJobs: () => void;
   jobs: Job[];
@@ -1782,6 +2019,7 @@ function WorkerDashboard({
   isLoadingApplications: boolean;
   onJobTypeFilterChange: (type?: string) => void;
   totalJobs: number;
+  onSelectJob: (job: Job) => void;
 }) {
   const [tab, setTab] = useState<WorkerTab>("browse");
   const [filter, setFilter] = useState<JobFilter>("All");
@@ -1866,7 +2104,15 @@ function WorkerDashboard({
           ) : applications.map((app) => {
             const stepIdx = STATUS_FLOW.indexOf(app.status);
             return (
-              <div key={app.id} className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-6 shadow-sm">
+              <div 
+                key={app.id} 
+                onClick={() => {
+                  if (app.job && app.job.id && app.job.id !== "undefined") {
+                    onSelectJob(app.job);
+                  }
+                }}
+                className="bg-[#FFFDF9] border border-[#E8DDD4] rounded-2xl p-6 shadow-sm cursor-pointer hover:shadow-md hover:border-[#7C4A2D]/50 transition-all text-left"
+              >
                 <div className="flex items-start justify-between gap-3 mb-5 flex-wrap">
                   <div>
                     <h3 className="font-['Fraunces'] font-bold text-lg text-[#7C4A2D]">{app.title}</h3>
@@ -1992,6 +2238,10 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
     if (!token) return;
 
     const extraDetails = [postSkills, postNotes].filter(Boolean).join("\n\n");
+    const skillsArray = postSkills
+      ? postSkills.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+
     const payload = {
       title: postTitle,
       description: `${postDescription}${extraDetails ? "\n\n" + extraDetails : ""}`,
@@ -2002,6 +2252,7 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
       payMin: payType === "Range" ? Number(postPayMin) : undefined,
       payMax: payType === "Range" ? Number(postPayMax) : undefined,
       payCustom: payType === "Open to discuss" ? postPayCustom || "Open to discuss" : undefined,
+      skills: skillsArray,
     };
 
     try {
@@ -2455,6 +2706,7 @@ export default function App() {
   const [isLoadingApplications, setIsLoadingApplications] = useState(false);
   const [loginMode, setLoginMode] = useState<"login" | "register">("login");
   const [loginRole, setLoginRole] = useState<"worker" | "employer">("worker");
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
 
   // Pagination states
   const [jobsPage, setJobsPage] = useState<number>(1);
@@ -2486,6 +2738,10 @@ export default function App() {
         const skillsParam = jobsFilters.skills.length > 0 ? jobsFilters.skills.join(",") : undefined;
         const sortParam = jobsFilters.sort;
 
+        const workerSkillsParam = profile?.workerProfile?.skillTags?.length
+          ? profile.workerProfile.skillTags.join(",")
+          : undefined;
+
         const response = await getJobs(
           jobSearchQuery,
           typeParam,
@@ -2494,6 +2750,7 @@ export default function App() {
           sortParam,
           jobsPage,
           10, // limit
+          workerSkillsParam,
         );
 
         if (!active) return;
@@ -2503,6 +2760,11 @@ export default function App() {
         const mapped = response.jobs.map(apiJobToUiJob);
         if (jobsPage === 1) {
           setJobs(mapped);
+          if (response.facets?.skills) {
+            setAllSkills(response.facets.skills.map((f: any) => f.key));
+          } else {
+            setAllSkills(getUniqueSkills(mapped));
+          }
         } else {
           setJobs((prev) => [...prev, ...mapped]);
         }
@@ -2525,7 +2787,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [jobsFilters, jobSearchQuery, jobsPage]);
+  }, [jobsFilters, jobSearchQuery, jobsPage, profile]);
 
   useEffect(() => {
     async function loadInitialSkills() {
@@ -2608,7 +2870,7 @@ export default function App() {
   }
 
   function handleJobSearchChange(search: string) {
-    setJobSearchQuery(search.trim());
+    setJobSearchQuery(search);
   }
 
   function handleJobTypeFilterChange(type?: string) {
@@ -2661,11 +2923,9 @@ export default function App() {
             }}
             onJobs={() => { setAuthError(null); setView("jobs"); }}
             onSearch={handleJobSearchChange}
-            jobs={jobs}
             appliedIds={appliedIds}
             onApply={handleApply}
             userRole={profile?.role ?? null}
-            totalJobs={totalJobs}
           />
         )}
         {view === "jobs"     && (
@@ -2685,10 +2945,11 @@ export default function App() {
             onLoadMore={() => setJobsPage((prev) => prev + 1)}
             isFetchingMore={isFetchingMore}
             totalJobs={totalJobs}
+            onSelectJob={setSelectedJob}
           />
         )}
         {view === "login"    && <LoginPage onSuccess={handleLoginSuccess} authError={authError} setAuthError={setAuthError} initialMode={loginMode} initialRole={loginRole} />}
-        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => { setAuthError(null); setView("jobs"); }} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} totalJobs={totalJobs} />}
+        {view === "worker"   && <WorkerDashboard onBrowseJobs={() => { setAuthError(null); setView("jobs"); }} jobs={jobs} token={token} profile={profile} appliedIds={appliedIds} onApply={handleApply} applications={applications} isLoadingApplications={isLoadingApplications} onJobTypeFilterChange={handleJobTypeFilterChange} totalJobs={totalJobs} onSelectJob={setSelectedJob} />}
         {view === "employer" && <EmployerDashboard token={token} profile={profile} />}
         {view === "profile"  && (
           <ProfilePage
@@ -2704,6 +2965,17 @@ export default function App() {
           />
         )}
       </div>
+
+      {selectedJob && (
+        <JobDetailsModal
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          applied={appliedIds.has(String(selectedJob.id))}
+          onApply={() => handleApply(String(selectedJob.id))}
+          showApplyButton={profile?.role !== "EMPLOYER"}
+          onSelectJob={(j) => setSelectedJob(j)}
+        />
+      )}
     </div>
   );
 }

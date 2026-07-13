@@ -11,7 +11,10 @@ export class ApplicationsRepository {
     workerId: string;
     message?: string;
   }) {
-    return this.prisma.application.create({ data });
+    return this.prisma.application.create({
+      data,
+      include: { job: { include: { employer: true } } },
+    });
   }
 
   findByWorkerAndJob(workerId: string, jobId: string) {

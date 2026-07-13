@@ -42,4 +42,8 @@ export class CreateJobDto {
   @IsOptional()
   @IsString()
   payCustom?: string;
+
+  @IsOptional()
+  @IsString({ each: true })
+  skills?: string[];
 }

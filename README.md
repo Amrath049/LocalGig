@@ -1,152 +1,95 @@
-# LocalGig
+# LocalGig — Hyperlocal Job Board
 
-A **hyperlocal job board** connecting blue-collar workers with local employers in a
-single city. Workers browse and apply for jobs; employers post jobs and manage
-applicants. Fully free, no payments — built as a backend-focused learning project.
+LocalGig is a hyperlocal job board designed to connect local blue-collar workers with nearby employers in a single city (e.g. Udupi). Employers can post jobs, manage applications, and move candidates through a hiring pipeline. Workers can search for jobs, filter by criteria, get real-time recommendations, and apply instantly.
 
-> **Status:** Phase 1 — Scaffold (in progress). See [Build phases](#build-phases).
+This project is built as a monorepo specifically designed to showcase **advanced Elasticsearch search and discovery capabilities** integrated into a production-ready **NestJS & Prisma** architecture.
 
 ---
 
-## Monorepo layout
+## 📂 Monorepo Layout
 
-```
+```text
 LocalGig/
-├── frontend/            # Next.js 16 app (from v0.app) — runs on :3000
-├── backend/             # NestJS 11 API (primary focus) — runs on :4000
-├── docker-compose.yml   # local infra: Postgres, Redis, Elasticsearch
-└── README.md            # you are here
+├── frontend/            # Vite + React client — runs on http://localhost:5173
+├── backend/             # NestJS 11 REST API — runs on http://localhost:4000
+├── docker-compose.yml   # Infrastructure (Postgres, Redis, Elasticsearch/OpenSearch)
+└── README.md            # You are here
 ```
 
-| Part                          | Stack                                          | Docs                                  |
-| ----------------------------- | ---------------------------------------------- | ------------------------------------- |
-| [`backend/`](backend/)        | NestJS 11, Prisma 6, PostgreSQL, Redis, ES     | [backend/README.md](backend/README.md) |
-| [`frontend/`](frontend/)      | Next.js 16, React 19, Tailwind 4, shadcn       | (v0.app generated)                    |
+| Component | Tech Stack | Responsibility |
+| :--- | :--- | :--- |
+| [`backend/`](backend/) | NestJS 11, Prisma 6, PostgreSQL, Redis, Elasticsearch | Role-based REST API, async search queue, query pipeline |
+| [`frontend/`](frontend/) | React 18, Vite 6, Tailwind CSS v4, Lucide React | Highly responsive UI, dynamic filters, autocomplete, detailed modal |
 
 ---
 
-## What it does
+## ⚡ Elasticsearch Showcase (Advanced Search Concepts)
 
-| Role         | Can do                                                                       |
-| ------------ | --------------------------------------------------------------------------- |
-| **Worker**   | Browse jobs without logging in. Must log in (verified email) to apply. Keeps a minimal profile: name, phone, skill tags. |
-| **Employer** | Registers with a business name + phone. Posts jobs and manages applicants through their hiring pipeline. |
+The search implementation is backed by Elasticsearch/OpenSearch and includes the following industry-standard search features:
 
-Single website with **role-based redirection** after login.
+1. **Dynamic Facets (Faceted Search)**: Filter categories (Job Type, Skills, Areas) are not hardcoded. They are populated dynamically using Elasticsearch **terms aggregations**, displaying real-time job counts next to filter criteria (e.g., `Full-time (12)`, `Gig (3)`).
+2. **Search Term Highlighting**: Matches within titles or descriptions are highlighted. The backend injects CSS-highlighted snippets (`<mark>` tags) into search hits, which are rendered inline inside the job cards so candidates see exactly why a job matched their query.
+3. **Real-time Autocomplete (Search-As-You-Type)**: As users type in the search bar, the UI displays query suggestions matching job titles or skills using phrase prefix matching.
+4. **Similar Jobs Widget (Recommendations)**: When viewing a job description, an Elasticsearch `more_like_this` query identifies similar active openings based on title, description text, and skills.
+5. **Personalized Skill Boosting**: If a candidate is logged in, their profile skills are sent to the search request, applying a match boost factor (`boost: 2.5`) to prioritize jobs that align with their background.
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
-The backend uses a strict, layered **repository pattern**:
+The backend follows a layered **Controller-Service-Repository** pattern:
 
+```text
+Controller (HTTP Route) ──> Service (Business Logic) ──> Repository (Database Query) ──> Prisma/PostgreSQL
 ```
-Gateway (controller)  →  Service (business logic)  →  Repository (DB access)  →  Postgres
-```
 
-Only repositories touch Prisma. Search runs through Elasticsearch (kept in sync via a
-Bull/Redis queue). Auth issues short-lived JWT access tokens with refresh-token
-rotation stored in Redis.
-
-### Tech stack
-
-- **API:** NestJS 11 (TypeScript, strict)
-- **Database:** PostgreSQL 16 + Prisma 6
-- **Cache / queues:** Redis 7 (refresh tokens, Bull job queues)
-- **Search:** Elasticsearch 8 (`localgig_jobs` index)
-- **Auth:** JWT (15 min) + refresh rotation (7 d), email verification via SendGrid
-- **Local infra:** Docker Compose
-- **CI:** GitHub Actions (added in the Polish phase)
+### Event-Driven Index Syncing
+To keep PostgreSQL and Elasticsearch in sync without blocking requests:
+- Creating, closing, or removing jobs enqueues a sync event in a **Redis list queue**.
+- A background worker consumes the queue asynchronously to update the Elasticsearch index, ensuring high reliability and performance.
+- On startup, the NestJS server checks index mappings and automatically synchronizes all active job postings.
 
 ---
 
-## Data model
+## 📊 Data Model
 
-Five core models (full schema: [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma)):
+Core entities (defined in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma)):
 
-- **User** — credentials, role, email-verified flag
-- **WorkerProfile** — name, phone, skill tags (1:1 with a worker User)
-- **EmployerProfile** — business name, phone (1:1 with an employer User)
-- **Job** — title, description, type, optional pay, status (owned by an employer)
-- **Application** — a worker's application to a job, with a status
-
-### Enums
-
-| Enum                | Values                                                        |
-| ------------------- | ------------------------------------------------------------ |
-| `Role`              | WORKER · EMPLOYER                                            |
-| `JobType`           | FULL_TIME · PART_TIME · GIG                                  |
-| `PayType`           | FIXED · RANGE · CUSTOM  _(pay is optional on a job)_         |
-| `JobStatus`         | OPEN · CLOSED  _(closed manually by the employer)_           |
-| `ApplicationStatus` | APPLIED → SEEN → SHORTLISTED → HIRED / NOT_SELECTED          |
-
-### Key product rules
-
-- A worker can apply to a given job **only once** (enforced by a DB unique constraint).
-- Jobs are **closed manually** by the employer — no auto-expiry.
-- **Email verification is required before login.**
-- **City-scoped** for the MVP (a single city).
+- **User**: Authentication details, user role (`WORKER` or `EMPLOYER`), and email verification status.
+- **WorkerProfile**: Full name, phone number, and a string array of skills (e.g. `["plumbing", "painting"]`).
+- **EmployerProfile**: Business name and contact phone number.
+- **Job**: Title, description, type (`FULL_TIME`, `PART_TIME`, `GIG`), location locality, status (`open`, `closed`, `removed`), pay details, and an array of required skills.
+- **Application**: Join table representing worker applications to jobs with pipeline states (`applied`, `seen`, `shortlisted`, `hired`, `not_selected`).
+- **RefreshToken**: Hashed tokens supporting secure rotation sessions.
+- **EmailVerificationOtp**: One-time email validation tokens.
 
 ---
 
-## Backend modules
+## 🚀 Quickstart
 
-| Module               | Responsibility                                          |
-| -------------------- | ------------------------------------------------------- |
-| `AuthModule`         | Register, login, email verify, refresh, logout          |
-| `UsersModule`        | User + profile management                               |
-| `JobsModule`         | Post jobs, list, status management                      |
-| `ApplicationsModule` | Apply, track, status updates                            |
-| `SearchModule`       | Elasticsearch indexing + search endpoint                |
-| `MailModule`         | Transactional email (SendGrid)                          |
-| `HealthModule`       | Health checks                                           |
+### Prerequisites
+- Node.js (v18+)
+- Docker Desktop (if using local infrastructure)
 
----
-
-## Quickstart
-
-> **Prerequisite:** Docker Desktop running. On Windows 11 Home this needs the WSL2
-> backend — see the [backend README](backend/README.md#prerequisites) if Docker
-> won't start.
-
+### 1. Setup Infrastructure
+To start local PostgreSQL, Redis, and Elasticsearch containers:
 ```bash
-# 1. Start infrastructure (Postgres, Redis, Elasticsearch)
 docker compose up -d
+```
+*(Alternatively, configure cloud-hosted URLs in `backend/.env` for remote databases).*
 
-# 2. Set up and run the backend
+### 2. Configure & Start Backend
+```bash
 cd backend
 npm install
-cp .env.example .env
-npx prisma generate
-npx prisma migrate dev --name init
-npm run start:dev          # API on http://localhost:4000
-
-# 3. (Optional) run the frontend in another terminal
-cd ../frontend
-npm install                # or: pnpm install
-npm run dev                # app on http://localhost:3000
+cp .env.example .env     # Update database, Redis, and Elasticsearch environment keys
+npx prisma db push       # Sync Prisma schema to PostgreSQL
+npm run start:dev        # API server starts on http://localhost:4000
 ```
 
-### Local service ports
-
-| Service       | URL / Port             |
-| ------------- | ---------------------- |
-| Backend API   | http://localhost:4000  |
-| Frontend      | http://localhost:3000  |
-| PostgreSQL    | localhost:5432         |
-| Redis         | localhost:6379         |
-| Elasticsearch | http://localhost:9200  |
-
----
-
-## Build phases
-
-| Phase | Goal                                                              | Status        |
-| ----- | ---------------------------------------------------------------- | ------------- |
-| 1     | **Scaffold** — NestJS, Docker Compose, Prisma connected         | 🟡 In progress |
-| 2     | **Auth** — register, login, verify email, refresh, logout       | ⬜ Planned     |
-| 3     | **Jobs** — post, list, status management                        | ⬜ Planned     |
-| 4     | **Search** — Elasticsearch index, Bull sync, search endpoint    | ⬜ Planned     |
-| 5     | **Applications** — apply, track, status updates                 | ⬜ Planned     |
-| 6     | **Profile** — worker + employer edit                            | ⬜ Planned     |
-| 7     | **Polish** — health checks, global filters, interceptors, CI    | ⬜ Planned     |
+### 3. Start Frontend
+```bash
+cd ../frontend
+npm install
+npm run dev              # Vite client starts on http://localhost:5173
+```

@@ -34,6 +34,7 @@ export class JobsService {
       payMin: body.payMin ?? null,
       payMax: body.payMax ?? null,
       payCustom: body.payCustom ?? null,
+      skills: body.skills ?? [],
       employer: { connect: { id: userId } },
     });
 
@@ -64,6 +65,7 @@ export class JobsService {
         payMin: dto.payMin ?? null,
         payMax: dto.payMax ?? null,
         payCustom: dto.payCustom ?? null,
+        skills: dto.skills ?? [],
         employer: { connect: { id: userId } },
       });
 
@@ -82,6 +84,7 @@ export class JobsService {
     sort?: string;
     limit?: number;
     page?: number;
+    workerSkills?: string;
   }) {
     if (
       filters.search ||
@@ -90,7 +93,8 @@ export class JobsService {
       filters.skills ||
       filters.sort ||
       filters.limit ||
-      filters.page
+      filters.page ||
+      filters.workerSkills
     ) {
       try {
         return await this.searchService.searchJobs(filters);
@@ -102,6 +106,28 @@ export class JobsService {
     }
 
     return this.jobsRepository.listOpenJobs(filters);
+  }
+
+  async getSimilarJobs(jobId: string) {
+    try {
+      return await this.searchService.getSimilarJobs(jobId);
+    } catch (error) {
+      this.logger.warn(
+        `Search similar jobs unavailable: ${(error as Error).message}`,
+      );
+      return [];
+    }
+  }
+
+  async getJobSuggestions(query: string) {
+    try {
+      return await this.searchService.suggestJobs(query);
+    } catch (error) {
+      this.logger.warn(
+        `Search suggestions unavailable: ${(error as Error).message}`,
+      );
+      return [];
+    }
   }
 
   async listMyJobs(userId: string) {

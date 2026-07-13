@@ -76,6 +76,7 @@ model Job {
   type        String
   location    String? // area / locality within the city
   status      String @default("open")
+  skills      String[] @default([])
 
   // Optional pay (see PayType enum)
   payType   String?

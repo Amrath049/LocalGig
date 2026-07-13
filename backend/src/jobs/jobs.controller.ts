@@ -31,6 +31,7 @@ export class JobsController {
     @Query('sort') sort?: string,
     @Query('limit') limit?: string,
     @Query('page') page?: string,
+    @Query('workerSkills') workerSkills?: string,
   ) {
     this.logger.log(`List job api called:${search}`);
     return this.jobsService.listJobs({
@@ -41,7 +42,20 @@ export class JobsController {
       sort,
       limit: limit ? parseInt(limit, 10) : undefined,
       page: page ? parseInt(page, 10) : undefined,
+      workerSkills,
     });
+  }
+
+  @Get('suggest')
+  suggest(@Query('query') query: string) {
+    this.logger.log(`Suggest jobs called with query: ${query}`);
+    return this.jobsService.getJobSuggestions(query || '');
+  }
+
+  @Get(':id/similar')
+  similar(@Param('id') id: string) {
+    this.logger.log(`Get similar jobs called for: ${id}`);
+    return this.jobsService.getSimilarJobs(id);
   }
 
   @Get('mine')
