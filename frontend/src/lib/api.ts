@@ -104,11 +104,11 @@ async function apiFetch<T>(path: string, options: RequestInit = {}) {
   return (await response.json()) as T;
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, role?: "WORKER" | "EMPLOYER") {
   return apiFetch<AuthResponse>("/auth/login", {
     method: "POST",
     headers: getHeaders(undefined, true),
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, role }),
   });
 }
 

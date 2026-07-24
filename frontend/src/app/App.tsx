@@ -29,6 +29,8 @@ import {
   Scissors,
   Users,
   TrendingUp,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob, getJobSuggestions, getSimilarJobs } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
@@ -1685,13 +1687,18 @@ function HomePage({
 
         {/* ── FOOTER ───────────────────────────────────────────────────── */}
         <footer className="border-t border-[#E8DDD4] bg-[#FFFDF9]">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div className="max-w-md">
               <p className="font-['Fraunces'] text-xl text-[#7C4A2D] italic font-semibold">
                 LocalGig
               </p>
               <p className="text-sm text-[#8C7B6E] mt-1">
                 Serving {CITY}, one job at a time.
+              </p>
+              <p className="text-xs text-[#A8988D] mt-2.5 leading-relaxed">
+                © {new Date().getFullYear()} LocalGig. All rights reserved.
+                <br />
+                <span className="font-semibold text-[#C0503A]">Disclaimer:</span> This is a demo project, not a real job portal. Please do not apply to listings or submit real personal/business data.
               </p>
             </div>
             <div className="flex gap-6 text-sm text-[#8C7B6E]">
@@ -1707,9 +1714,6 @@ function HomePage({
               >
                 Browse Jobs
               </button>
-              <span className="hover:text-[#2C1A0E] transition-colors cursor-pointer">
-                Contact
-              </span>
             </div>
           </div>
         </footer>
@@ -1745,6 +1749,7 @@ function LoginPage({
   const [businessName, setBusinessName] = useState("");
   const [employerPhone, setEmployerPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     setMode(initialMode);
@@ -1791,7 +1796,7 @@ function LoginPage({
         return;
       }
 
-      const result = await login(email, password);
+      const result = await login(email, password, role === "worker" ? "WORKER" : "EMPLOYER");
       setDone(true);
       onSuccess(role, result.accessToken);
     } catch (error: any) {
@@ -1808,7 +1813,7 @@ function LoginPage({
 
     try {
       await verifyEmailOtp(email, otp);
-      const result = await login(email, password);
+      const result = await login(email, password, role === "worker" ? "WORKER" : "EMPLOYER");
       setDone(true);
       onSuccess(role, result.accessToken);
     } catch (error: any) {
@@ -1907,14 +1912,29 @@ function LoginPage({
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Password</label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    maxLength={mode === "register" ? 50 : undefined}
+                    placeholder="••••••••"
+                    className="w-full pl-4 pr-11 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8C7B6E] hover:text-[#2C1A0E] focus:outline-none transition-colors"
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
               {role === "worker" && mode === "register" && (
                 <>
@@ -1925,20 +1945,24 @@ function LoginPage({
                       required
                       value={name}
                       onChange={(e) => setName(e.target.value)}
+                      maxLength={50}
                       placeholder="Raju Sharma"
                       className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Phone number</label>
-                    <input
-                      type="tel"
-                      required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                      className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
-                    />
+                    <div className="flex items-center bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl focus-within:border-[#7C4A2D] transition-colors overflow-hidden">
+                      <span className="pl-4 pr-2 text-sm text-[#8C7B6E] font-medium border-r border-[#E8DDD4] select-none">+91</span>
+                      <input
+                        type="tel"
+                        required
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        placeholder="98765 43210"
+                        className="w-full px-3 py-3 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none"
+                      />
+                    </div>
                   </div>
                 </>
               )}
@@ -1951,20 +1975,24 @@ function LoginPage({
                       required
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
+                      maxLength={50}
                       placeholder="Sunrise Dhaba"
                       className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">Business phone</label>
-                    <input
-                      type="tel"
-                      required
-                      value={employerPhone}
-                      onChange={(e) => setEmployerPhone(e.target.value)}
-                      placeholder="+91 80000 00000"
-                      className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
-                    />
+                    <div className="flex items-center bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl focus-within:border-[#7C4A2D] transition-colors overflow-hidden">
+                      <span className="pl-4 pr-2 text-sm text-[#8C7B6E] font-medium border-r border-[#E8DDD4] select-none">+91</span>
+                      <input
+                        type="tel"
+                        required
+                        value={employerPhone}
+                        onChange={(e) => setEmployerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        placeholder="80000 00000"
+                        className="w-full px-3 py-3 bg-transparent text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none"
+                      />
+                    </div>
                   </div>
                 </>
               )}

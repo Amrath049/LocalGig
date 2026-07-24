@@ -99,7 +99,7 @@ export class AuthService {
     return { message: 'Email verified successfully.' };
   }
 
-  async login(email: string, password: string) {
+  async login(email: string, password: string, role?: string) {
     const user = await this.usersRepository.findByEmailWithProfiles(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -110,6 +110,18 @@ export class AuthService {
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (role && user.role !== role) {
+      if (user.role === 'WORKER') {
+        throw new BadRequestException(
+          'This account is registered as a Worker (employee). Please log in as a Worker.',
+        );
+      } else {
+        throw new BadRequestException(
+          'This account is registered as an Employer. Please log in as an Employer.',
+        );
+      }
     }
 
     const accessToken = await this.generateAccessToken(

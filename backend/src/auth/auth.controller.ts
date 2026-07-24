@@ -27,7 +27,7 @@ export class AuthController {
   async login(@Body() dto: LoginDto) {
     this.logger.log(`Login api called with email: ${dto.email}`);
     try {
-      return await this.authService.login(dto.email, dto.password);
+      return await this.authService.login(dto.email, dto.password, dto.role);
     } catch (error) {
       this.logger.error(`Login api failed for email: ${dto.email}`);
       throw error;
