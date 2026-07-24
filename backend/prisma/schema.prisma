@@ -149,3 +149,11 @@ model EmailVerificationOtp {
   @@index([userId])
   @@index([userId, codeHash])
 }
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  aliases   String[] @default([])
+  createdAt DateTime @default(now())
+}

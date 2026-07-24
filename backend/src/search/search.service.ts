@@ -78,6 +78,7 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
     search?: string;
     posted?: string;
     skills?: string;
+    skillMatch?: string;
     sort?: string;
     limit?: number;
     page?: number;
@@ -112,11 +113,21 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
         .map((s) => s.trim())
         .filter(Boolean);
       if (skillsList.length > 0) {
-        filter.push({
-          terms: {
-            skills: skillsList.map((s) => s.toLowerCase()),
-          },
-        });
+        if (filters.skillMatch === 'all') {
+          for (const s of skillsList) {
+            filter.push({
+              term: {
+                skills: s.toLowerCase(),
+              },
+            });
+          }
+        } else {
+          filter.push({
+            terms: {
+              skills: skillsList.map((s) => s.toLowerCase()),
+            },
+          });
+        }
       }
     }
 
@@ -200,7 +211,7 @@ export class SearchService implements OnModuleInit, OnModuleDestroy {
       },
       aggs: {
         all_skills: {
-          terms: { field: 'skills', size: 30 },
+          terms: { field: 'skills', size: 20 },
         },
         all_types: {
           terms: { field: 'type', size: 10 },

@@ -10,6 +10,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { MailModule } from './mail/mail.module';
 import { SearchModule } from './search/search.module';
+import { SkillsModule } from './skills/skills.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SearchModule } from './search/search.module';
     ApplicationsModule,
     MailModule,
     SearchModule,
+    SkillsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -32,7 +32,7 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob, getJobSuggestions, getSimilarJobs } from "../lib/api";
+import { login, register, verifyEmailOtp, getMe, getJobs, applyJob, getMyApplications, getEmployerJobs, updateProfile, createJob, updateApplicationStatus, removeJob, getJobSuggestions, getSimilarJobs, suggestSkills, resolveSkill } from "../lib/api";
 import type { ApiUserProfile } from "../lib/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -580,15 +580,201 @@ interface FilterPanelProps {
 const POSTED_OPTIONS = ["Any time", "Today", "Last 3 days", "This week"];
 const JOB_TYPES: JobFilter[] = ["All", "Full-time", "Part-time", "Gig"];
 
+function SkillTagInput({
+  value,
+  onChange,
+  placeholder = "Search and select skills...",
+}: {
+  value: Array<{ name: string; slug: string }>;
+  onChange: (val: Array<{ name: string; slug: string }>) => void;
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; slug: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (query.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+
+    setLoading(true);
+    const handler = setTimeout(async () => {
+      try {
+        const res = await suggestSkills(query);
+        setSuggestions(res.skills || []);
+      } catch (err) {
+        console.error("Failed to suggest skills", err);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(handler);
+  }, [query]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (skill: { name: string; slug: string }) => {
+    if (!value.some((v) => v.slug === skill.slug)) {
+      onChange([...value, skill]);
+    }
+    setQuery("");
+    setShowDropdown(false);
+  };
+
+  const handleCreateNew = async () => {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    setLoading(true);
+    try {
+      const res = await resolveSkill(trimmed, true);
+      handleSelect({ name: res.name, slug: res.slug });
+    } catch (err) {
+      console.error("Failed to create skill", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemove = (slug: string) => {
+    onChange(value.filter((v) => v.slug !== slug));
+  };
+
+  const hasExactMatch = suggestions.some(
+    (s) => s.name.toLowerCase() === query.trim().toLowerCase()
+  );
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {value.map((skill) => (
+          <span
+            key={skill.slug}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F5EDE0] text-sm text-[#7C4A2D] rounded-lg border border-[#E8DDD4] font-medium"
+          >
+            {skill.name}
+            <button
+              type="button"
+              onClick={() => handleRemove(skill.slug)}
+              className="text-[#8C7B6E] hover:text-[#7C4A2D] focus:outline-none"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setShowDropdown(true);
+        }}
+        onFocus={() => setShowDropdown(true)}
+        placeholder={placeholder}
+        className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
+      />
+
+      {showDropdown && (query.trim().length >= 2 || loading) && (
+        <div className="absolute z-50 w-full mt-1.5 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl shadow-[0_4px_20px_rgba(44,26,14,0.1)] overflow-hidden max-h-60 overflow-y-auto">
+          {loading && (
+            <div className="px-4 py-3 text-xs text-[#8C7B6E]">Loading suggestions...</div>
+          )}
+          {!loading && suggestions.length === 0 && query.trim() && !hasExactMatch && (
+            <button
+              type="button"
+              onClick={handleCreateNew}
+              className="w-full text-left px-4 py-3 text-sm text-[#E07B39] hover:bg-[#F5EDE0] font-medium border-none outline-none transition-colors"
+            >
+              Create new skill &ldquo;{query.trim()}&rdquo;
+            </button>
+          )}
+          {!loading && suggestions.length > 0 && (
+            <div className="py-1">
+              {suggestions.map((skill) => (
+                <button
+                  key={skill.slug}
+                  type="button"
+                  onClick={() => handleSelect(skill)}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[#2C1A0E] hover:bg-[#F5EDE0] transition-colors border-none outline-none"
+                >
+                  {skill.name}
+                </button>
+              ))}
+              {query.trim() && !hasExactMatch && (
+                <button
+                  type="button"
+                  onClick={handleCreateNew}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[#E07B39] hover:bg-[#F5EDE0] font-medium border-t border-[#E8DDD4] outline-none transition-colors"
+                >
+                  Create &ldquo;{query.trim()}&rdquo;
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilterPanel({ filters, onChange, onReset, resultCount, skills }: FilterPanelProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [suggestions, setSuggestions] = useState<Array<{ name: string; slug: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   function set<K extends keyof FilterState>(key: K, val: FilterState[K]) {
     onChange({ ...filters, [key]: val });
   }
 
-  function toggleSkill(skill: string) {
-    const has = filters.skills.includes(skill);
-    set("skills", has ? filters.skills.filter((s) => s !== skill) : [...filters.skills, skill]);
+  function toggleSkill(skillSlug: string) {
+    const has = filters.skills.includes(skillSlug);
+    set("skills", has ? filters.skills.filter((s) => s !== skillSlug) : [...filters.skills, skillSlug]);
   }
+
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await suggestSkills(searchQuery);
+        setSuggestions(res.skills || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const hasActive =
     filters.jobType !== "All" ||
@@ -652,24 +838,115 @@ function FilterPanel({ filters, onChange, onReset, resultCount, skills }: Filter
       {/* Skills */}
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-[#2C1A0E] mb-3">Skills</p>
-        <div className="flex flex-wrap gap-1.5">
-          {skills.map((s) => {
-            const active = filters.skills.includes(s);
-            return (
-              <button
-                key={s}
-                onClick={() => toggleSkill(s)}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-medium uppercase tracking-wider transition-all ${
-                  active
-                    ? "bg-[#A3B899] text-white"
-                    : "bg-[#A3B899]/20 text-[#3D6858] hover:bg-[#A3B899]/40"
-                }`}
-              >
-                {s}
-              </button>
-            );
-          })}
+        
+        {/* Selected Skill Chips */}
+        {filters.skills.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {filters.skills.map((s) => {
+              const displayName = s
+                .split("-")
+                .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                .join(" ");
+              return (
+                <span
+                  key={s}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#A3B899] text-white rounded-full text-[11px] font-medium uppercase tracking-wider"
+                >
+                  {displayName}
+                  <button
+                    type="button"
+                    onClick={() => toggleSkill(s)}
+                    className="hover:text-[#FFF] focus:outline-none ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Autocomplete Input */}
+        <div className="relative" ref={dropdownRef}>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowDropdown(true);
+            }}
+            onFocus={() => setShowDropdown(true)}
+            placeholder="Filter by skill..."
+            className="w-full px-3 py-2 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
+          />
+
+          {showDropdown && (searchQuery.trim().length >= 2 || loading) && (
+            <div className="absolute z-50 w-full mt-1 bg-[#FFFDF9] border border-[#E8DDD4] rounded-xl shadow-[0_4px_20px_rgba(44,26,14,0.1)] overflow-hidden max-h-48 overflow-y-auto">
+              {loading && (
+                <div className="px-3 py-2 text-xs text-[#8C7B6E]">Loading...</div>
+              )}
+              {!loading && suggestions.length === 0 && (
+                <div className="px-3 py-2 text-xs text-[#8C7B6E]">No skills found</div>
+              )}
+              {!loading && suggestions.length > 0 && (
+                <div className="py-1">
+                  {suggestions.map((skill) => {
+                    const active = filters.skills.includes(skill.slug);
+                    return (
+                      <button
+                        key={skill.slug}
+                        type="button"
+                        onClick={() => {
+                          toggleSkill(skill.slug);
+                          setSearchQuery("");
+                          setShowDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors border-none outline-none flex items-center justify-between ${
+                          active
+                            ? "bg-[#7C4A2D] text-[#FAF7F2]"
+                            : "text-[#2C1A0E] hover:bg-[#F5EDE0]"
+                        }`}
+                      >
+                        {skill.name}
+                        {active && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Popular Skills from facets */}
+        {searchQuery.trim().length < 2 && skills.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#8C7B6E] mb-2">Popular in city</p>
+            <div className="flex flex-wrap gap-1.5">
+              {skills.map((s) => {
+                const active = filters.skills.includes(s);
+                const displayName = s
+                  .split("-")
+                  .map((sPart) => sPart.charAt(0).toUpperCase() + sPart.slice(1))
+                  .join(" ");
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => toggleSkill(s)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider transition-all ${
+                      active
+                        ? "bg-[#A3B899] text-white"
+                        : "bg-[#A3B899]/20 text-[#3D6858] hover:bg-[#A3B899]/40"
+                    }`}
+                  >
+                    {displayName}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Result count (desktop only) */}
@@ -2205,7 +2482,7 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
   const [postPayMin, setPostPayMin] = useState("");
   const [postPayMax, setPostPayMax] = useState("");
   const [postPayCustom, setPostPayCustom] = useState("");
-  const [postSkills, setPostSkills] = useState("");
+  const [postSkills, setPostSkills] = useState<Array<{ name: string; slug: string }>>([]);
   const [postNotes, setPostNotes] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -2265,10 +2542,9 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
     e.preventDefault();
     if (!token) return;
 
-    const extraDetails = [postSkills, postNotes].filter(Boolean).join("\n\n");
-    const skillsArray = postSkills
-      ? postSkills.split(",").map((s) => s.trim()).filter(Boolean)
-      : [];
+    const skillsNames = postSkills.map((s) => s.name).join(", ");
+    const extraDetails = [skillsNames, postNotes].filter(Boolean).join("\n\n");
+    const skillsArray = postSkills.map((s) => s.slug);
 
     const payload = {
       title: postTitle,
@@ -2294,7 +2570,7 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
       setPostPayMin("");
       setPostPayMax("");
       setPostPayCustom("");
-      setPostSkills("");
+      setPostSkills([]);
       setPostNotes("");
       setStatusMessage(null);
 
@@ -2504,11 +2780,10 @@ function EmployerDashboard({ token, profile }: { token: string | null; profile: 
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#2C1A0E] mb-1.5">What skills or experience matters?</label>
-                  <input
+                  <SkillTagInput
                     value={postSkills}
-                    onChange={(e) => setPostSkills(e.target.value)}
-                    placeholder="e.g. Cooking, Driving licence, Heavy lifting"
-                    className="w-full px-4 py-3 bg-[#F0EBE3] border border-[#E8DDD4] rounded-xl text-sm text-[#2C1A0E] placeholder:text-[#8C7B6E] outline-none focus:border-[#7C4A2D] transition-colors"
+                    onChange={setPostSkills}
+                    placeholder="Search and select skills (e.g. Cooking, driving...)"
                   />
                 </div>
                 <div>
@@ -2748,6 +3023,33 @@ export default function App() {
     setHasMoreJobs(true);
   }, [jobsFilters, jobSearchQuery]);
 
+  // Load initial skills from URL query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const skillsParam = params.get("skills");
+    if (skillsParam) {
+      const skillsArray = skillsParam.split(",").map((s) => s.trim()).filter(Boolean);
+      if (skillsArray.length > 0) {
+        setJobsFilters((prev) => ({
+          ...prev,
+          skills: skillsArray,
+        }));
+      }
+    }
+  }, []);
+
+  // Sync skills to URL query params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (jobsFilters.skills.length > 0) {
+      params.set("skills", jobsFilters.skills.join(","));
+    } else {
+      params.delete("skills");
+    }
+    const newRelativePathQuery = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+    window.history.replaceState(null, "", newRelativePathQuery);
+  }, [jobsFilters.skills]);
+
   useEffect(() => {
     let active = true;
     async function loadJobs() {
@@ -2779,6 +3081,7 @@ export default function App() {
           jobsPage,
           10, // limit
           workerSkillsParam,
+          "any",
         );
 
         if (!active) return;

@@ -157,6 +157,7 @@ export async function getJobs(
   page?: number,
   limit?: number,
   workerSkills?: string,
+  skillMatch?: string,
 ) {
   const query = new URLSearchParams();
   if (search) query.set("search", search);
@@ -167,8 +168,21 @@ export async function getJobs(
   if (page !== undefined) query.set("page", String(page));
   if (limit !== undefined) query.set("limit", String(limit));
   if (workerSkills) query.set("workerSkills", workerSkills);
+  if (skillMatch) query.set("skillMatch", skillMatch);
   const queryString = query.toString();
   return apiFetch<GetJobsResponse>(`/jobs${queryString ? `?${queryString}` : ""}`);
+}
+
+export async function suggestSkills(query: string) {
+  return apiFetch<{ skills: Array<{ slug: string; name: string }> }>(`/skills/suggest?q=${encodeURIComponent(query)}`);
+}
+
+export async function resolveSkill(input: string, forceCreate = false) {
+  return apiFetch<{ id: string; name: string; slug: string; aliases: string[] }>("/skills/resolve", {
+    method: "POST",
+    headers: getHeaders(undefined, true),
+    body: JSON.stringify({ input, forceCreate }),
+  });
 }
 
 export async function getJobSuggestions(query: string) {

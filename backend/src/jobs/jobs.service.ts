@@ -9,6 +9,7 @@ import { JobType, PayType } from '../common/enums';
 import { JobsRepository } from './jobs.repository';
 import { CreateJobDto } from './dto/create-job.dto';
 import { SearchService } from '../search/search.service';
+import { SkillsService } from '../skills/skills.service';
 
 @Injectable()
 export class JobsService {
@@ -17,12 +18,17 @@ export class JobsService {
   constructor(
     private readonly jobsRepository: JobsRepository,
     private readonly searchService: SearchService,
+    private readonly skillsService: SkillsService,
   ) {}
 
   async createJob(userId: string, body: CreateJobDto) {
     if (!body.title || !body.description || !body.type) {
       throw new BadRequestException('Missing required job fields');
     }
+
+    const resolvedSkills = body.skills
+      ? await this.skillsService.resolveBatch(body.skills, true)
+      : [];
 
     const job = await this.jobsRepository.createJob({
       title: body.title,
@@ -34,7 +40,7 @@ export class JobsService {
       payMin: body.payMin ?? null,
       payMax: body.payMax ?? null,
       payCustom: body.payCustom ?? null,
-      skills: body.skills ?? [],
+      skills: resolvedSkills,
       employer: { connect: { id: userId } },
     });
 
@@ -55,6 +61,10 @@ export class JobsService {
         );
       }
 
+      const resolvedSkills = dto.skills
+        ? await this.skillsService.resolveBatch(dto.skills, true)
+        : [];
+
       const job = await this.jobsRepository.createJob({
         title: dto.title,
         description: dto.description,
@@ -65,7 +75,7 @@ export class JobsService {
         payMin: dto.payMin ?? null,
         payMax: dto.payMax ?? null,
         payCustom: dto.payCustom ?? null,
-        skills: dto.skills ?? [],
+        skills: resolvedSkills,
         employer: { connect: { id: userId } },
       });
 
@@ -81,6 +91,7 @@ export class JobsService {
     search?: string;
     posted?: string;
     skills?: string;
+    skillMatch?: string;
     sort?: string;
     limit?: number;
     page?: number;
@@ -91,6 +102,7 @@ export class JobsService {
       filters.type ||
       filters.posted ||
       filters.skills ||
+      filters.skillMatch ||
       filters.sort ||
       filters.limit ||
       filters.page ||

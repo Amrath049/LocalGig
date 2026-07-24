@@ -13,15 +13,14 @@ For the product vision, data model, and full architecture, see the
 | Concern        | Choice                                             |
 | -------------- | -------------------------------------------------- |
 | Framework      | NestJS 11 (TypeScript, strict)                     |
-| Database       | PostgreSQL 16 + Prisma 6 (ORM)                     |
+| Database       | PostgreSQL 16 (with `pg_trgm` fuzzy indexing) + Prisma 6 |
 | Cache / tokens | Redis 7 (refresh-token rotation, Bull queues)      |
 | Search         | Elasticsearch 8 (`localgig_jobs` index)            |
 | Auth           | JWT (15 min access) + refresh rotation (7 days)     |
 | Mail           | SendGrid (email verification)                      |
 | Infra (local)  | Docker Compose                                     |
 
-> Phases 2–7 (Auth, Jobs, Search, Applications, Profile, Polish) progressively add
-> the modules above. Right now the project is at **Phase 1 — Scaffold**.
+> All major features (Auth, Jobs, Search, Applications, Profile, Skills Taxonomy) are fully implemented.
 
 ---
 
@@ -161,21 +160,35 @@ optional during scaffolding.
 ```
 backend/
 ├── prisma/
-│   └── schema.prisma        # data model: User, WorkerProfile, EmployerProfile, Job, Application
+│   └── schema.prisma        # data model: User, WorkerProfile, EmployerProfile, Job, Application, Skill
 ├── src/
+│   ├── auth/                # registration, login (with role validations)
 │   ├── config/
 │   │   └── env.validation.ts # Joi env schema
+│   ├── jobs/                # job listing, creation, and search orchestration
 │   ├── prisma/
 │   │   ├── prisma.module.ts  # global module
 │   │   └── prisma.service.ts # DB connection lifecycle
+│   ├── search/              # Elasticsearch indexing and advanced search queries
+│   ├── skills/              # Skill taxonomy management: autocomplete suggestions & resolution
 │   ├── app.module.ts         # root module (Config + Prisma wired in)
 │   └── main.ts               # bootstrap: validation pipe, CORS, port
 ├── .env.example
 └── README.md
 ```
 
-As feature modules land (Phase 2+), each lives under `src/<feature>/` with its own
+As feature modules land, each lives under `src/<feature>/` with its own
 `*.controller.ts`, `*.service.ts`, `*.repository.ts`, and `dto/`.
+
+---
+
+## Skills Taxonomy Endpoints
+
+The `skills` module manages normalized skill entities (not freeform text), resolving aliases, and supporting autocomplete matches.
+
+- **`GET /skills/suggest?q=<query>`**: Typo-tolerant prefix autocomplete suggesting up to 8 matched skills.
+- **`POST /skills/resolve`**: Resolves a raw skill name into a database-backed skill slug. Pass `{ input: string, forceCreate?: boolean }` in request body.
+- **`POST /skills/resolve-batch`**: Resolves multiple raw skill strings in batch. Pass `{ inputs: string[] }` in request body.
 
 ---
 
