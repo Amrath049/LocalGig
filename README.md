@@ -64,7 +64,7 @@ Core entities (defined in [`backend/prisma/schema.prisma`](backend/prisma/schema
 - **EmailVerificationOtp**: One-time email validation tokens.
 
 ---
-
+<!-- 
 ## 🚀 Quickstart
 
 ### Prerequisites
@@ -93,3 +93,4 @@ cd ../frontend
 npm install
 npm run dev              # Vite client starts on http://localhost:5173
 ```
+-->
